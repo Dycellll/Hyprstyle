@@ -1,7 +1,21 @@
-# Hyprstyle
-An intuitive cli styles save/load system for **Hyprland**, with a simple install script and easy customization.
+# What is Hyprstyle?
+**Hyprstyle** is a CLI save/load system for **Hyprland**. Its main purpose is to let you easily and intuitively save and load styles, or as you may call them, dotfiles.
+It comes with a .json config, for you to define any component you want your styles to save and load, and optionally define custom save/load logic through normal shell syntax.
 
-**Hyprstyle** allows you to define your own components to save and load, with a .json config file. It lets you configure components to save/load through simple default pasting, or complex scripts, and anything in between.
+# How do I use Hyprstyle?
+**Hyprstyle** uses only a few main commands, which are listed here:
+
+-**hyprstyle list** -- Lists all saved styles.
+
+-**hyprstyle current** -- Gets the current style name, or "No style selected." if there's none.
+
+-**hyprstyle current name** -- Gets the current style name, or "" if there's none. Most useful for other programs to read the current style name.
+
+-**hyprstyle save <name>** -- Saves a new style or replaces an existing one.
+
+-**hyprstyle set <name>** -- Loads a saved style.
+
+-**hyprstyle delete <name>** -- Deletes a saved style.
 
 # Install guide
 To install **hyprstyle**, run this command in your desired shell:
@@ -14,7 +28,8 @@ To uninstall **hyprstyle**, run this command in your desired shell:
 `curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh -s -- --uninstall`
 
 # Configuration examples
-**Hyprstyle** automatically generates a config file with instructions on how to set components up, but here's an example config, which includes plenty of info you may need, to configure your hyprstyle.
+**Hyprstyle** automatically generates a config file with instructions on how to set components up.
+This is an example config, which includes plenty of info you may need to configure your hyprstyle.
 
 ```
 {
