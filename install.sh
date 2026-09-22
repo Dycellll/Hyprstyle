@@ -57,33 +57,20 @@ case "$answer" in
         ;;
 esac
 
-ARCH=$(uname -m)
-
-case "$ARCH" in
-    x86_64)
-        ASSET="hyprstyle-linux-x64"
-        ;;
-    aarch64|arm64)
-        ASSET="hyprstyle-linux-arm64"
-        ;;
-    *)
-        echo "Unsupported architecture: $ARCH"
-        exit 1
-        ;;
-esac
-
 API_URL="https://api.github.com/repos/$REPO/releases/latest"
 
 echo "Fetching latest release info..."
 
 DOWNLOAD_URL=$(
     curl -fsSL "$API_URL" |
-        grep -o "\"browser_download_url\": *\"[^\"]*$ASSET[^\"]*\"" |
-        sed -E 's/.*"(https[^"]+)"/\1/'
+        grep '"browser_download_url"' |
+        grep -vE '(_source|\.tar\.gz|\.zip|\.tar)$' |
+        sed -E 's/.*"browser_download_url": *"([^"]+)".*/\1/' |
+        head -n 1
 )
 
 if [ -z "$DOWNLOAD_URL" ]; then
-    echo "Couldn't find a release asset matching '$ASSET' at $REPO."
+    echo "Couldn't find a binary in the latest release of $REPO."
     echo "Check https://github.com/$REPO/releases for available builds."
     exit 1
 fi
