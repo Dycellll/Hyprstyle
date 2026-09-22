@@ -103,4 +103,4 @@ case ":${PATH}:" in
         ;;
 esac
 
-echo "Done. Run '${BINARY_NAME} list' to get started."
+echo "Done. Run '${BINARY_NAME}' to get started."
