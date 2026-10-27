@@ -172,11 +172,13 @@ static class Program
                 
                 case "setpreview" when args.Length <= 3:
                     StyleManager.SetPreview(args.Skip(1).ToArray());
-                    break;
+                    Updater.Notify();
+                    return;
 
                 case "deletepreview" when args.Length <= 2:
                     StyleManager.DeletePreview(args.Length == 2 ? args[1] : null);
-                    break;
+                    Updater.Notify();
+                    return;
             }
         }
 
