@@ -75,7 +75,7 @@ API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 
 echo "Fetching latest release info..."
 
-RELEASE=$(curl -fsSL "$API_URL")
+RELEASE=$(curl -fsSL -H 'Cache-Control: no-cache' "$API_URL")
 
 LATEST_TAG=$(
     printf '%s\n' "$RELEASE" |
@@ -119,7 +119,7 @@ trap cleanup EXIT HUP INT TERM
 
 echo "Downloading $DOWNLOAD_URL..."
 
-curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE"
+curl -fsSL -H 'Cache-Control: no-cache' "${DOWNLOAD_URL}?cb=$(date +%s)" -o "$TMP_FILE"
 
 chmod +x "$TMP_FILE"
 mv "$TMP_FILE" "$BIN_PATH"
