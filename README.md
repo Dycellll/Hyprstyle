@@ -1,5 +1,5 @@
 # What is Hyprstyle?
-**Hyprstyle** is a CLI save/load system for **Hyprland**. Its main purpose is to let you easily and intuitively save and load styles, or as you may call them, dotfiles.
+**Hyprstyle** is a CLI+GUI (via quickshell) save/load system for **Hyprland**. Its main purpose is to let you easily and intuitively save and load styles, or as you may call them, dotfiles.
 It comes with a .json config, for you to define any component you want your styles to save and load, and optionally define custom save/load logic through normal shell syntax.
 
 # Requirements
