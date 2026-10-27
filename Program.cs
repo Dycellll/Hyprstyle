@@ -1330,7 +1330,7 @@ static class StyleManager
 static class Updater
 {
     private const string Repo = "Dycellll/hyprstyle";
-    private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(12);
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
     private static readonly string CachePath = $"{Config.ConfigDir}/update_cache";
 
     public static string CurrentVersion { get; } = ReadVersion();
