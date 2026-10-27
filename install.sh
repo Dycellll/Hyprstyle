@@ -5,10 +5,9 @@ REPO="Dycellll/hyprstyle"
 BINARY_NAME="hyprstyle"
 INSTALL_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${HOME}/.config/hyprstyle"
+BIN_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 uninstall() {
-    BIN_PATH="${INSTALL_DIR}/${BINARY_NAME}"
-
     if [ -f "$BIN_PATH" ]; then
         rm -f "$BIN_PATH"
         echo "Removed $BIN_PATH"
@@ -34,35 +33,59 @@ uninstall() {
     echo "Uninstall complete."
 }
 
-if [ "${1:-}" = "--uninstall" ]; then
-    uninstall
-    exit 0
-fi
+MODE="install"
 
-if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-    echo "hyprstyle is a theme switcher built specifically for Hyprland."
-    echo "It doesn't look like you're currently running Hyprland."
-    exit 1
-fi
-
-printf "Install hyprstyle to %s? [y/N] " "$INSTALL_DIR" > /dev/tty
-read -r answer < /dev/tty
-
-case "$answer" in
-    y|Y|yes|YES|Yes)
-        ;;
-    *)
-        echo "Aborted."
+case "${1:-}" in
+    --uninstall)
+        uninstall
         exit 0
         ;;
+    --update)
+        MODE="update"
+        ;;
 esac
+
+if [ "$MODE" = "update" ]; then
+    if [ ! -f "$BIN_PATH" ]; then
+        echo "hyprstyle isn't installed at $BIN_PATH."
+        echo "Run this script without --update to install it."
+        exit 1
+    fi
+else
+    if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+        echo "hyprstyle is a theme switcher built specifically for Hyprland."
+        echo "It doesn't look like you're currently running Hyprland."
+        exit 1
+    fi
+
+    printf "Install hyprstyle to %s? [y/N] " "$INSTALL_DIR" > /dev/tty
+    read -r answer < /dev/tty
+
+    case "$answer" in
+        y|Y|yes|YES|Yes)
+            ;;
+        *)
+            echo "Aborted."
+            exit 0
+            ;;
+    esac
+fi
 
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 
 echo "Fetching latest release info..."
 
+RELEASE=$(curl -fsSL "$API_URL")
+
+LATEST_TAG=$(
+    printf '%s\n' "$RELEASE" |
+    grep '"tag_name":' |
+    sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' |
+    head -n 1
+)
+
 DOWNLOAD_URL=$(
-    curl -fsSL "$API_URL" |
+    printf '%s\n' "$RELEASE" |
     grep '"browser_download_url":' |
     grep '"https://github.com/.*/releases/download/.*/hyprstyle"' |
     sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/' |
@@ -75,9 +98,18 @@ if [ -z "$DOWNLOAD_URL" ]; then
     exit 1
 fi
 
+if [ "$MODE" = "update" ]; then
+    INSTALLED=$("$BIN_PATH" version 2>/dev/null || true)
+
+    if [ -n "$LATEST_TAG" ] && [ "${INSTALLED#v}" = "${LATEST_TAG#v}" ]; then
+        echo "Already up to date (${INSTALLED})."
+        exit 0
+    fi
+fi
+
 mkdir -p "$INSTALL_DIR"
 
-TMP_FILE=$(mktemp)
+TMP_FILE=$(mktemp "${INSTALL_DIR}/.${BINARY_NAME}.XXXXXX")
 
 cleanup() {
     rm -f "$TMP_FILE"
@@ -90,9 +122,14 @@ echo "Downloading $DOWNLOAD_URL..."
 curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE"
 
 chmod +x "$TMP_FILE"
-mv "$TMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
+mv "$TMP_FILE" "$BIN_PATH"
 
-echo "Installed to ${INSTALL_DIR}/${BINARY_NAME}"
+if [ "$MODE" = "update" ]; then
+    echo "Updated to ${LATEST_TAG:-the latest release}."
+    exit 0
+fi
+
+echo "Installed to ${BIN_PATH}"
 
 case ":${PATH}:" in
     *":${INSTALL_DIR}:"*)
