@@ -169,6 +169,14 @@ static class Program
                 case "--refresh-update-cache":
                     Updater.RefreshCache();
                     return;
+                
+                case "setpreview" when args.Length <= 3:
+                    StyleManager.SetPreview(args.Skip(1).ToArray());
+                    break;
+
+                case "deletepreview" when args.Length <= 2:
+                    StyleManager.DeletePreview(args.Length == 2 ? args[1] : null);
+                    break;
             }
         }
 
@@ -713,6 +721,112 @@ static class StyleManager
             File.WriteAllLines(file, aliases);
     }
 
+    public static void SetPreview(string[] args)
+    {
+        string? name = null;
+        string? image = null;
+
+        if (args.Length == 2)
+        {
+            name = args[0];
+            image = args[1];
+        }
+        else if (args.Length == 1)
+        {
+            if (FindStyle(args[0]) != null)
+                name = args[0];
+            else
+                image = args[0];
+        }
+
+        name ??= CurrentRelative();
+
+        if (name == null)
+        {
+            Fail("No style selected.");
+            return;
+        }
+
+        string? path = FindStyle(name);
+
+        if (path == null)
+        {
+            Fail($"Style '{name}' does not exist.");
+            return;
+        }
+
+        string target = Path.Join(path, PreviewFile);
+
+        if (image == null)
+        {
+            try
+            {
+                if (Processes.Run("grim", ["-s", "0.4", target], suppressOutput: true) != 0)
+                    Fail("grim couldn't take a screenshot.");
+                else
+                    Console.WriteLine($"Updated preview for {NameOf(path)}");
+            }
+            catch (Win32Exception)
+            {
+                Fail("grim isn't installed or isn't on your PATH.");
+
+                // Notification for people running the app via a launcher or keybind, who cant read terminal
+                try
+                {
+                    Processes.Run("notify-send", ["hyprstyle", "grim isn't installed or isn't on your PATH."], suppressOutput: true);
+                }
+                catch
+                {
+                }
+            }
+
+            return;
+        }
+
+        string source = image.StartsWith("file://")
+            ? Uri.UnescapeDataString(image[7..])
+            : Config.Expand(image);
+
+        if (!File.Exists(source))
+        {
+            Fail($"Couldn't find {image}.");
+            return;
+        }
+
+        Files.CopyFile(source, target);
+        Console.WriteLine($"Updated preview for {NameOf(path)}");
+    }
+
+    public static void DeletePreview(string? name)
+    {
+        name ??= CurrentRelative();
+
+        if (name == null)
+        {
+            Fail("No style selected.");
+            return;
+        }
+
+        string? path = FindStyle(name);
+
+        if (path == null)
+        {
+            Fail($"Style '{name}' does not exist.");
+            return;
+        }
+
+        string file = Path.Join(path, PreviewFile);
+
+        if (!File.Exists(file))
+        {
+            Fail($"'{NameOf(path)}' has no preview.");
+            return;
+        }
+
+        File.Delete(file);
+        Console.WriteLine($"Removed preview from {NameOf(path)}");
+    }
+
     private static string DisplayName(string style)
     {
         var aliases = ReadAliases(style);
@@ -1070,7 +1184,7 @@ static class StyleManager
 
         using var stream = new MemoryStream();
 
-        using (var json = new Utf8JsonWriter(stream))
+        using (var json = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
             json.WriteStartObject();
             json.WriteString("version", Updater.CurrentVersion);
@@ -1389,28 +1503,49 @@ static class Gui
         catch (Win32Exception)
         {
             Console.WriteLine("quickshell isn't installed or isn't on your PATH.");
+            // Notification for people running the app via a launcher or keybind, who cant read terminal
+            try
+            {
+                Processes.Run("notify-send", ["hyprstyle", "quickshell isn't installed or isn't on your PATH."], suppressOutput: true);
+            }
+            catch
+            {
+            }
+
             Environment.ExitCode = 1;
         }
     }
 
     private const string Source = """"
         import QtQuick
-        import QtQuick.Controls
         import QtQuick.Layouts
         import Quickshell
         import Quickshell.Io
+        import Quickshell.Wayland
 
-        FloatingWindow {
+        PanelWindow {
             id: win
-            title: "hyprstyle"
-            color: "#15151b"
-            implicitWidth: 960
-            implicitHeight: 640
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "hyprstyle"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
-            property var info: ({ styles: [], current: null })
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+
+            property var info: ({ styles: [], folders: [], current: null })
             property string selected: ""
+            property string folder: ""
+            property string query: ""
             property string status: ""
-            property bool saving: false
+            property bool hidden: false
+            property bool confirmDelete: false
+            property int stamp: 0
 
             readonly property var selectedStyle: {
                 const list = info.styles || []
@@ -1421,6 +1556,128 @@ static class Gui
                 return null
             }
 
+            readonly property var shown: {
+                const q = query.trim().toLowerCase()
+                return (info.styles || []).filter(s => {
+                    if (folder !== "" && s.folder !== folder)
+                        return false
+                    if (q === "")
+                        return true
+                    return s.name.toLowerCase().includes(q)
+                        || s.aliases.some(a => a.toLowerCase().includes(q))
+                })
+            }
+
+            onSelectedChanged: confirmDelete = false
+
+            component Btn: Rectangle {
+                id: btn
+                property string label: ""
+                property bool accent: false
+                signal clicked()
+
+                implicitWidth: caption.implicitWidth + 24
+                implicitHeight: 30
+                radius: 4
+                opacity: enabled ? 1 : 0.4
+                border.width: accent ? 0 : 1
+                border.color: "#34343c"
+                color: accent ? (hit.containsMouse ? "#8db0f9" : "#7aa2f7")
+                    : (hit.containsMouse ? "#2a2a31" : "transparent")
+
+                Text {
+                    id: caption
+                    anchors.centerIn: parent
+                    text: btn.label
+                    color: btn.accent ? "#14141a" : "#d4d4dc"
+                    font.pixelSize: 13
+                }
+
+                MouseArea {
+                    id: hit
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: btn.clicked()
+                }
+            }
+
+            component Input: Rectangle {
+                id: box
+                property alias text: edit.text
+                property string hint: ""
+                signal accepted()
+
+                implicitHeight: 30
+                radius: 4
+                color: "#1b1b20"
+                border.width: 1
+                border.color: edit.activeFocus ? "#7aa2f7" : "#2e2e36"
+
+                TextInput {
+                    id: edit
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: "#d4d4dc"
+                    selectionColor: "#7aa2f7"
+                    selectedTextColor: "#14141a"
+                    font.pixelSize: 13
+                    clip: true
+                    onAccepted: box.accepted()
+                }
+
+                Text {
+                    anchors.fill: edit
+                    verticalAlignment: Text.AlignVCenter
+                    text: box.hint
+                    color: "#62626c"
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                    visible: edit.text === ""
+                }
+            }
+
+            component Muted: Text {
+                color: "#8a8a94"
+                font.pixelSize: 12
+            }
+
+            component SideRow: Rectangle {
+                id: row
+                property string label: ""
+                property bool on: false
+                signal clicked()
+
+                implicitHeight: 28
+                color: on ? "#23232a" : rowHit.containsMouse ? "#1c1c22" : "transparent"
+
+                Rectangle {
+                    visible: row.on
+                    width: 2
+                    height: parent.height
+                    color: "#7aa2f7"
+                }
+
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    verticalAlignment: Text.AlignVCenter
+                    text: row.label
+                    color: row.on ? "#e6e6ee" : "#a8a8b2"
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    id: rowHit
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: row.clicked()
+                }
+            }
+
             Process {
                 id: loader
                 command: ["@BIN@", "json"]
@@ -1428,8 +1685,10 @@ static class Gui
                     onStreamFinished: {
                         try {
                             win.info = JSON.parse(text)
+                            if (win.selectedStyle === null)
+                                win.selected = win.info.current || ""
                         } catch (e) {
-                            win.status = "Couldn't read hyprstyle json"
+                            win.status = "Couldn't read the style list"
                         }
                     }
                 }
@@ -1440,18 +1699,19 @@ static class Gui
                 stdout: StdioCollector {
                     onStreamFinished: {
                         const parts = text.split(/[\r\n]+/).filter(s => s.trim() !== "")
-                        win.status = parts.length ? parts[parts.length - 1].trim() : ""
+                        win.status = parts.length ? parts[parts.length - 1].replace("✓", "").trim() : ""
                     }
                 }
                 onExited: {
-                    win.saving = false
+                    win.hidden = false
                     win.visible = true
+                    win.stamp++
                     loader.running = true
                 }
             }
 
             Timer {
-                id: saveTimer
+                id: delay
                 interval: 450
                 property var args: []
                 onTriggered: win.run(args)
@@ -1460,9 +1720,14 @@ static class Gui
             Connections {
                 target: Quickshell
                 function onLastWindowClosed() {
-                    if (!win.saving)
+                    if (!win.hidden)
                         Qt.quit()
                 }
+            }
+
+            Shortcut {
+                sequence: "Escape"
+                onActivated: Qt.quit()
             }
 
             Component.onCompleted: loader.running = true
@@ -1472,250 +1737,466 @@ static class Gui
                 runner.running = true
             }
 
-            function saveStyle(name) {
-                saving = true
+            function runHidden(args) {
+                hidden = true
                 visible = false
-                saveTimer.args = ["save", name]
-                saveTimer.start()
+                delay.args = args
+                delay.start()
             }
 
-            ColumnLayout {
+            function saveCurrent() {
+                const name = saveName.text.trim()
+                if (name === "")
+                    return
+                selected = name
+                saveName.text = ""
+                runHidden(["save", name])
+            }
+
+            function setPreview(source) {
+                const path = source.trim()
+                if (selected === "" || path === "")
+                    return
+                run(["setpreview", selected, path])
+            }
+
+            Rectangle {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                color: "#88000000"
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: Qt.quit()
+                }
+            }
 
-                    TextField {
-                        id: saveName
-                        Layout.fillWidth: true
-                        placeholderText: "Save the current setup as..."
-                        onAccepted: saveButton.clicked()
-                    }
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(1060, parent.width - 80)
+                height: Math.min(680, parent.height - 80)
+                radius: 6
+                color: "#16161a"
+                border.width: 1
+                border.color: "#2a2a30"
 
-                    Button {
-                        id: saveButton
-                        text: "Save"
-                        enabled: saveName.text.trim() !== ""
-                        onClicked: {
-                            win.saveStyle(saveName.text.trim())
-                            saveName.text = ""
-                        }
-                    }
-
-                    Button {
-                        text: "Reload"
-                        onClicked: win.run(["reload"])
-                    }
+                MouseArea {
+                    anchors.fill: parent
                 }
 
-                Rectangle {
-                    visible: win.info.updateAvailable === true
-                    Layout.fillWidth: true
-                    implicitHeight: 40
-                    radius: 6
-                    color: "#2b2540"
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
 
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 8
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                        Text {
-                            Layout.fillWidth: true
-                            color: "#d8d0f0"
-                            text: "Update available: " + win.info.latestVersion
+                        Input {
+                            Layout.preferredWidth: 220
+                            hint: "Search"
+                            onTextChanged: win.query = text
                         }
 
-                        Button {
-                            text: "Update"
+                        Item { Layout.fillWidth: true }
+
+                        Input {
+                            id: saveName
+                            Layout.preferredWidth: 260
+                            hint: "Save current setup as..."
+                            onAccepted: win.saveCurrent()
+                        }
+
+                        Btn {
+                            label: "Save"
+                            accent: true
+                            enabled: saveName.text.trim() !== ""
+                            onClicked: win.saveCurrent()
+                        }
+                    }
+
+                    RowLayout {
+                        visible: win.info.updateAvailable === true
+                        Layout.fillWidth: true
+
+                        Muted {
+                            Layout.fillWidth: true
+                            text: "Version " + win.info.latestVersion + " is out (you have " + win.info.version + ")"
+                        }
+
+                        Btn {
+                            label: "Update"
                             onClicked: win.run(["update"])
                         }
                     }
-                }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 16
-
-                    GridView {
-                        id: grid
+                    RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        clip: true
-                        cellWidth: 220
-                        cellHeight: 190
-                        model: win.info.styles
+                        spacing: 14
 
-                        delegate: Item {
-                            id: card
-                            required property var modelData
-                            width: grid.cellWidth
-                            height: grid.cellHeight
+                        ColumnLayout {
+                            visible: (win.info.folders || []).length > 0
+                            Layout.preferredWidth: 150
+                            Layout.fillHeight: true
+                            spacing: 0
 
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 6
-                                radius: 8
-                                color: card.modelData.name === win.selected ? "#2a2540" : "#1e1e26"
-                                border.width: card.modelData.current ? 2 : 0
-                                border.color: "#8b7cf6"
-
-                                Rectangle {
-                                    id: frame
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    anchors.margins: 8
-                                    height: 116
-                                    radius: 4
-                                    color: "#101015"
-                                    clip: true
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "No preview"
-                                        color: "#5d5b6b"
-                                        visible: shot.status !== Image.Ready
-                                    }
-
-                                    Image {
-                                        id: shot
-                                        anchors.fill: parent
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        cache: false
-                                        source: card.modelData.preview ? "file://" + card.modelData.preview : ""
-                                    }
-                                }
-
-                                Text {
-                                    id: nameText
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: frame.bottom
-                                    anchors.margins: 8
-                                    text: card.modelData.name
-                                    color: "white"
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: nameText.bottom
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    text: card.modelData.aliases.join(", ")
-                                    color: "#8a879a"
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        win.selected = card.modelData.name
-                                        win.run(["set", card.modelData.name])
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.preferredWidth: 260
-                        Layout.fillHeight: true
-                        visible: win.selectedStyle !== null
-                        spacing: 10
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: win.selectedStyle ? win.selectedStyle.name : ""
-                            color: "white"
-                            font.pixelSize: 16
-                            elide: Text.ElideRight
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-
-                            TextField {
-                                id: renameField
+                            SideRow {
                                 Layout.fillWidth: true
-                                placeholderText: "New name"
+                                label: "All styles"
+                                on: win.folder === ""
+                                onClicked: win.folder = ""
                             }
-
-                            Button {
-                                text: "Rename"
-                                enabled: renameField.text.trim() !== ""
-                                onClicked: {
-                                    win.run(["rename", win.selected, renameField.text.trim()])
-                                    renameField.text = ""
-                                    win.selected = ""
-                                }
-                            }
-                        }
-
-                        Text {
-                            text: "Aliases"
-                            color: "#8a879a"
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 6
 
                             Repeater {
-                                model: win.selectedStyle ? win.selectedStyle.aliases : []
+                                model: win.info.folders || []
 
-                                delegate: Button {
+                                delegate: SideRow {
                                     required property string modelData
-                                    text: modelData + "  ×"
-                                    onClicked: win.run(["deletealias", win.selected, modelData])
+                                    Layout.fillWidth: true
+                                    label: modelData
+                                    on: win.folder === modelData
+                                    onClicked: win.folder = modelData
                                 }
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+
+                            GridView {
+                                id: grid
+                                anchors.fill: parent
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                cellWidth: Math.floor(width / Math.max(1, Math.floor(width / 210)))
+                                readonly property real shotHeight: (cellWidth - 12) * 0.5625
+                                cellHeight: shotHeight + 46
+                                model: win.shown
+
+                                delegate: Item {
+                                    id: tile
+                                    required property var modelData
+                                    readonly property bool picked: modelData.name === win.selected
+                                    width: grid.cellWidth
+                                    height: grid.cellHeight
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 6
+                                        radius: 3
+                                        clip: true
+                                        color: "#1d1d22"
+                                        border.width: tile.picked ? 2 : 1
+                                        border.color: tile.picked ? "#7aa2f7" : "#2a2a30"
+
+                                        Rectangle {
+                                            id: frame
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 1
+                                            height: grid.shotHeight - 1
+                                            color: "#101014"
+
+                                            Muted {
+                                                anchors.centerIn: parent
+                                                text: "No preview"
+                                                visible: shot.status !== Image.Ready
+                                            }
+
+                                            Image {
+                                                id: shot
+                                                anchors.fill: parent
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                cache: false
+                                                source: tile.modelData.preview
+                                                    ? "file://" + tile.modelData.preview + "?" + win.stamp
+                                                    : ""
+                                            }
+                                        }
+
+                                        Row {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: frame.bottom
+                                            anchors.margins: 8
+                                            spacing: 6
+
+                                            Text {
+                                                visible: tile.modelData.current
+                                                text: "●"
+                                                color: "#7aa2f7"
+                                                font.pixelSize: 11
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+
+                                            Text {
+                                                width: parent.width - (tile.modelData.current ? 17 : 0)
+                                                text: tile.modelData.displayName
+                                                color: "#e0e0e8"
+                                                font.pixelSize: 13
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: win.selected = tile.modelData.name
+                                            onDoubleClicked: {
+                                                win.selected = tile.modelData.name
+                                                win.run(["set", tile.modelData.name])
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Muted {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 40, 340)
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
+                                visible: win.shown.length === 0
+                                text: (win.info.styles || []).length === 0
+                                    ? "No styles saved yet. Set your desktop up how you like it, then type a name at the top right and hit Save."
+                                    : "Nothing matches."
                             }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
+                        Rectangle {
+                            visible: win.selectedStyle !== null
+                            Layout.preferredWidth: 270
+                            Layout.fillHeight: true
+                            radius: 4
+                            color: "#1b1b20"
+                            border.width: 1
+                            border.color: "#2a2a30"
 
-                            TextField {
-                                id: aliasField
-                                Layout.fillWidth: true
-                                placeholderText: "New alias"
-                            }
+                            Flickable {
+                                id: flick
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                clip: true
+                                contentWidth: width
+                                contentHeight: details.implicitHeight
+                                boundsBehavior: Flickable.StopAtBounds
 
-                            Button {
-                                text: "Add"
-                                enabled: aliasField.text.trim() !== ""
-                                onClicked: {
-                                    win.run(["alias", win.selected, aliasField.text.trim()])
-                                    aliasField.text = ""
+                                ColumnLayout {
+                                    id: details
+                                    width: flick.width
+                                    spacing: 8
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: width * 0.5625
+                                        color: "#101014"
+                                        clip: true
+
+                                        Image {
+                                            id: bigShot
+                                            anchors.fill: parent
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            cache: false
+                                            source: win.selectedStyle && win.selectedStyle.preview
+                                                ? "file://" + win.selectedStyle.preview + "?" + win.stamp
+                                                : ""
+                                        }
+
+                                        Muted {
+                                            anchors.centerIn: parent
+                                            horizontalAlignment: Text.AlignHCenter
+                                            visible: bigShot.status !== Image.Ready
+                                            text: "No preview\nDrop an image here"
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            visible: dropper.containsDrag
+                                            color: "#cc16161a"
+                                            border.width: 2
+                                            border.color: "#7aa2f7"
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Drop to use as preview"
+                                                color: "#e0e0e8"
+                                                font.pixelSize: 13
+                                            }
+                                        }
+
+                                        DropArea {
+                                            id: dropper
+                                            anchors.fill: parent
+                                            onDropped: drop => {
+                                                if (drop.hasUrls)
+                                                    win.setPreview(drop.urls[0].toString())
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 4
+                                        text: win.selectedStyle ? win.selectedStyle.name : ""
+                                        color: "#e6e6ee"
+                                        font.pixelSize: 16
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Btn {
+                                        Layout.fillWidth: true
+                                        accent: true
+                                        label: win.selectedStyle && win.selectedStyle.current ? "Reapply" : "Apply"
+                                        onClicked: win.run(["set", win.selected])
+                                    }
+
+                                    Muted {
+                                        Layout.topMargin: 8
+                                        text: "Preview image"
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Input {
+                                            id: pathField
+                                            Layout.fillWidth: true
+                                            hint: "Path to an image"
+                                            onAccepted: {
+                                                win.setPreview(text)
+                                                text = ""
+                                            }
+                                        }
+
+                                        Btn {
+                                            label: "Set"
+                                            enabled: pathField.text.trim() !== ""
+                                            onClicked: {
+                                                win.setPreview(pathField.text)
+                                                pathField.text = ""
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Btn {
+                                            Layout.fillWidth: true
+                                            label: "Screenshot"
+                                            onClicked: win.runHidden(["setpreview", win.selected])
+                                        }
+
+                                        Btn {
+                                            Layout.fillWidth: true
+                                            label: "Remove"
+                                            enabled: win.selectedStyle !== null && !!win.selectedStyle.preview
+                                            onClicked: win.run(["deletepreview", win.selected])
+                                        }
+                                    }
+
+                                    Muted {
+                                        Layout.topMargin: 8
+                                        text: "Aliases"
+                                    }
+
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Repeater {
+                                            model: win.selectedStyle ? win.selectedStyle.aliases : []
+
+                                            delegate: Btn {
+                                                required property string modelData
+                                                label: modelData + " ×"
+                                                onClicked: win.run(["deletealias", win.selected, modelData])
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Input {
+                                            id: aliasField
+                                            Layout.fillWidth: true
+                                            hint: "New alias"
+                                            onAccepted: {
+                                                win.run(["alias", win.selected, text.trim()])
+                                                text = ""
+                                            }
+                                        }
+
+                                        Btn {
+                                            label: "Add"
+                                            enabled: aliasField.text.trim() !== ""
+                                            onClicked: {
+                                                win.run(["alias", win.selected, aliasField.text.trim()])
+                                                aliasField.text = ""
+                                            }
+                                        }
+                                    }
+
+                                    Muted {
+                                        Layout.topMargin: 8
+                                        text: "Rename"
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Input {
+                                            id: renameField
+                                            Layout.fillWidth: true
+                                            hint: "New name"
+                                        }
+
+                                        Btn {
+                                            label: "Rename"
+                                            enabled: renameField.text.trim() !== ""
+                                            onClicked: {
+                                                const next = renameField.text.trim()
+                                                win.run(["rename", win.selected, next])
+                                                win.selected = next
+                                                renameField.text = ""
+                                            }
+                                        }
+                                    }
+
+                                    Btn {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 12
+                                        label: win.confirmDelete ? "Click again to delete" : "Delete"
+                                        onClicked: {
+                                            if (!win.confirmDelete) {
+                                                win.confirmDelete = true
+                                                return
+                                            }
+                                            win.run(["delete", win.selected])
+                                            win.selected = ""
+                                        }
+                                    }
                                 }
-                            }
-                        }
-
-                        Item { Layout.fillHeight: true }
-
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Delete"
-                            onClicked: {
-                                win.run(["delete", win.selected])
-                                win.selected = ""
                             }
                         }
                     }
-                }
 
-                Text {
-                    Layout.fillWidth: true
-                    text: win.status
-                    color: "#8a879a"
-                    elide: Text.ElideRight
+                    Muted {
+                        Layout.fillWidth: true
+                        text: win.status !== "" ? win.status : "Double-click a style to apply it"
+                        elide: Text.ElideRight
+                    }
                 }
             }
         }
@@ -1764,6 +2245,8 @@ static class Cli
               hyprstyle rename <name> <new_name> -- Rename a saved style.
               hyprstyle alias <name> <alias> -- Give a style an alias.
               hyprstyle deletealias <name> <alias> -- Remove an alias from a style.
+              hyprstyle setpreview [name] [image] -- Set a style's preview from an image, or from a screenshot if no image is given. Defaults to the current style.
+              hyprstyle deletepreview [name] -- Remove a style's preview. Defaults to the current style.
               hyprstyle delete <name> -- Delete a saved style.
               hyprstyle gui -- Open the quickshell GUI.
               hyprstyle json -- Print all style data as JSON.
