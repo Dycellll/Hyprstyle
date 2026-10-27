@@ -5,22 +5,45 @@ It comes with a .json config, for you to define any component you want your styl
 # How do I use Hyprstyle?
 **Hyprstyle** uses only a few main commands, which are listed here:
 
--**hyprstyle list** -- Lists all saved styles.
+- **hyprstyle list** -- Lists all saved styles, along with their aliases.
 
--**hyprstyle current** -- Gets the current style name, or "No style selected." if there's none.
+- **hyprstyle current** -- Gets the current style name, or "" if there's none. Most useful for other programs to read the current style name. (`hyprstyle current name` still works too.)
 
--**hyprstyle current name** -- Gets the current style name, or "" if there's none. Most useful for other programs to read the current style name.
+- **hyprstyle save <name>** -- Saves a new style or replaces an existing one. If `grim` is installed, a preview screenshot is saved with it.
 
--**hyprstyle save <name>** -- Saves a new style or replaces an existing one.
+- **hyprstyle set <name|alias>** -- Loads a saved style.
 
--**hyprstyle set <name>** -- Loads a saved style.
+- **hyprstyle reload** -- Loads the current style again.
 
--**hyprstyle delete <name>** -- Deletes a saved style.
+- **hyprstyle rename <name> <new_name>** -- Renames a saved style.
+
+- **hyprstyle alias <name> <alias>** -- Gives a style an alias, which can be used instead of its name in `set`. Two styles can't share the same alias.
+
+- **hyprstyle deletealias <name> <alias>** -- Removes an alias from a style.
+
+- **hyprstyle delete <name>** -- Deletes a saved style.
+
+- **hyprstyle gui** -- Opens a GUI showing all your saved styles with previews. Click a style to load it, and use the buttons to save, rename, alias and delete. Requires `quickshell`.
+
+- **hyprstyle json** -- Prints all style data (styles, aliases, previews, current style, version, update status) as JSON. Made for building your own quickshell GUIs.
+
+- **hyprstyle update** -- Updates hyprstyle to the latest release.
+
+- **hyprstyle version** -- Prints the installed version.
 
 # Install guide
 To install **hyprstyle**, run this command in your desired shell:
 
 `curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh`
+
+# Update guide
+Whenever a new version is out, hyprstyle will let you know the next time you run a command. To update, run:
+
+`hyprstyle update`
+
+Or, if you'd rather use the install script directly:
+
+`curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh -s -- --update`
 
 # Uninstall guide
 To uninstall **hyprstyle**, run this command in your desired shell:
@@ -53,7 +76,7 @@ This is an example config, which includes plenty of info you may need to configu
     { "name": "wofi", "type": "copy", "source": "~/.config/wofi", "isDirectory": true },
     { "name": "fish", "type": "copy", "source": "~/.config/fish", "isDirectory": true },
     { "name": "hypremoji", "type": "copy", "source": "~/.config/hypremoji", "isDirectory": true },
-    { "name": "fastfetch", "type": "copy", "source": "~/.config/fastfetch", "isDirectory": true }
+    { "name": "fastfetch", "type": "copy", "source": "~/.config/fastfetch", "isDirectory": true },
 
     // DUNST, KITTY (simple folder copying + forced manual reload)
     { "name": "dunst", "type": "copy", "source": "~/.config/dunst", "isDirectory": true,
