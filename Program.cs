@@ -1687,6 +1687,8 @@ static class Gui
                     onStreamFinished: {
                         try {
                             win.info = JSON.parse(text)
+                            if (win.folder !== "" && !(win.info.folders || []).includes(win.folder))
+                                win.folder = ""
                             if (win.selectedStyle === null)
                                 win.selected = win.info.current || ""
                         } catch (e) {
