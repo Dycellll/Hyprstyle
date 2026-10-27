@@ -1,6 +1,6 @@
 # Hyprstyle
 
-A CLI+GUI tool to save, load, and switch between complete Hyprland styles.
+A CLI+GUI tool to save, load, and switch between your Hyprland rices.
 
 ## Quick install
 
