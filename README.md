@@ -1,5 +1,19 @@
+# Hyprstyle
+
+A CLI+GUI tool to save, load, and switch between complete Hyprland styles.
+
+## Quick install
+
+Run this command in your terminal to install the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh
+```
+
+**Requirements:** Hyprland. See the [full installation guide](#install-guide) and [requirements](#requirements) below for details.
+
 # What is Hyprstyle?
-**Hyprstyle** is a CLI+GUI (via quickshell) save/load system for **Hyprland**. Its main purpose is to let you easily and intuitively save and load styles, or as you may call them, dotfiles.
+**Hyprstyle** is a CLI+GUI (via quickshell) save/load system for **Hyprland**. Its main purpose is to let you easily and intuitively save and load styles, or as you may call them, dotfiles, or maybe, rices, whichever tickles your fancy.
 It comes with a .json config, for you to define any component you want your styles to save and load, and optionally define custom save/load logic through normal shell syntax.
 
 # Requirements
