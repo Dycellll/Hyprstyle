@@ -20,7 +20,7 @@ It comes with a .json config, for you to define any component you want your styl
 - **Hyprland** (`hyprctl` must be on your PATH)
 - **grim** *(optional)* -- used to capture style previews (screenshots). Without it, styles simply have no automatic preview.
 - **quickshell** *(optional)* -- required for `hyprstyle gui`.
-- **notify-send** *(optional)* -- used to show an error notification when `grim` or `quickshell` is missing and hyprstyle was launched from a keybind/launcher, where you can't read terminal output.
+- **libnotify (notify-send)** *(optional)* -- used to show an error notification when `grim` or `quickshell` is missing. Not necessary if those 2 are present.
 
 # How do I use Hyprstyle?
 **Hyprstyle** uses only a few main commands, which are listed here:
