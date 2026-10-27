@@ -1839,7 +1839,11 @@ static class Gui
 
                         ColumnLayout {
                             visible: (win.info.folders || []).length > 0
+
+                            // Prevent long folder names from expanding the sidebar.
+                            Layout.minimumWidth: 150
                             Layout.preferredWidth: 150
+                            Layout.maximumWidth: 150
                             Layout.fillHeight: true
                             spacing: 0
 
