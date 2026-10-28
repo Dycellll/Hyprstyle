@@ -20,7 +20,7 @@ It comes with a .json config, for you to define any component you want your styl
 - **Hyprland** (`hyprctl` must be on your PATH)
 - **grim** *(optional)* -- used to capture style previews (screenshots). Without it, styles simply have no automatic preview.
 - **quickshell** *(optional)* -- required for `hyprstyle gui`.
-- **libnotify (notify-send)** *(optional)* -- used to show an error notification when `grim` or `quickshell` is missing. Not necessary if those 2 are present.
+- **libnotify (notify-send)** *(optional)* -- used to send a desktop notification when a new version is out, and to show an error notification when `grim` or `quickshell` is missing.
 
 # How do I use Hyprstyle?
 **Hyprstyle** uses only a few main commands, which are listed here:
@@ -29,13 +29,13 @@ It comes with a .json config, for you to define any component you want your styl
 
 - **`hyprstyle current`** -- Gets the current style name, or "" if there's none. Most useful for other programs to read the current style name. (`hyprstyle current name` still works too.)
 
-- **`hyprstyle save <name>`** -- Saves a new style or replaces an existing one. Replacing keeps the style's aliases. If `grim` is installed, a preview screenshot is saved with it. The saved style becomes the current style. Use `folder/name` to save a style inside a folder.
+- **`hyprstyle save <name>`** -- Saves a new style or replaces an existing one. Replacing keeps the style's aliases. If `grim` is installed, a preview screenshot is saved with it. The saved style becomes the current style. Use `folder/name` to save a style inside a folder. A name that is already a folder (or sits inside another style) is refused, so saving can never wipe out other styles.
 
 - **`hyprstyle set <name|alias>`** -- Loads a saved style.
 
 - **`hyprstyle reload`** -- Loads the current style again.
 
-- **`hyprstyle rename <name> <new_name>`** -- Renames a saved style. The new name can include a folder (`folder/new_name`) to move the style there.
+- **`hyprstyle rename <name> <new_name>`** -- Renames a saved style. The new name can include a folder (`folder/new_name`) to move the style there. Folders left empty by the move are removed.
 
 - **`hyprstyle alias <name> <alias>`** -- Gives a style an alias, which can be used instead of its name in `set`. Two styles can't share the same alias, and an alias can't be the same as an existing style name. Aliases can't be empty, start with a dot, or contain spaces or slashes.
 
@@ -49,7 +49,7 @@ It comes with a .json config, for you to define any component you want your styl
 
 - **`hyprstyle deletepreview [name]`** -- Removes a style's preview. Defaults to the current style.
 
-- **`hyprstyle delete <name>`** -- Deletes a saved style. Passing a folder name deletes the whole folder and everything in it.
+- **`hyprstyle delete <name>`** -- Deletes a saved style. Passing a folder name deletes the whole folder and everything in it. Folders that end up empty are removed automatically. If the deleted style was the current one, there is simply no current style afterwards.
 
 - **`hyprstyle gui`** -- Opens a GUI showing all your saved styles with previews. Requires `quickshell`. See [The GUI](#the-gui) below.
 
@@ -63,18 +63,22 @@ Running `hyprstyle` with no arguments (or an unknown command) prints the usage t
 
 # Styles, folders and names
 - Styles are stored in `styleDir` (default `~/.config/hyprstyle/styles`). Each style is a folder containing one saved item per component, a `.style` marker file, and optionally `.aliases` and `.preview.png`.
-- Style names can contain `/` to organize styles into folders, e.g. `hyprstyle save dark/nord`. Folders show up as groups in `list` and as a sidebar in the GUI.
+- Style names can contain `/` to organize styles into folders, e.g. `hyprstyle save dark/nord`. Folders show up as groups in `list` and as a sidebar in the GUI. A folder only exists while it contains styles; deleting or moving the last one removes it.
 - A style name can't be empty, can't be `current`, can't be an absolute path, and no part of it can be empty or start with a dot.
-- `styleDir/current` is a symlink to the currently loaded style. The current style name is also remembered in `~/.config/hyprstyle/current_style`.
+
+## The current style
+- `styleDir/current` is a symlink to the currently loaded style.
+- Older versions kept a copy of the name in `~/.config/hyprstyle/current_style`. It is no longer read, you can delete it.
 
 # The GUI
-`hyprstyle gui` opens a full-screen overlay (powered by quickshell):
+`hyprstyle gui` opens a full-screen overlay (powered by quickshell).
 
 - **Search** by style name or alias.
 - **Folder sidebar** to filter styles (shown only when you have folders).
 - **Click** a style to select it, **double-click** to apply it. The current style is marked with a dot.
 - **Details panel** for the selected style, with:
   - **Apply / Reapply**
+  - **Update with current setup** -- overwrites the selected style with your current setup (click twice to confirm). Aliases are kept and the style becomes the current one. The GUI hides briefly so the preview screenshot doesn't include it.
   - **Preview image** -- drag and drop an image onto the preview, or type a path and press *Set*. *Screenshot* hides the GUI and takes a new screenshot, *Remove* deletes the preview.
   - **Aliases** -- click an alias to remove it, or type a new one and press *Add*.
   - **Rename**
@@ -93,7 +97,7 @@ Running `hyprstyle` with no arguments (or an unknown command) prints the usage t
 | `updateAvailable` | `true` if `latestVersion` is newer than `version` |
 | `styleDir` | Absolute path of the style directory |
 | `configPath` | Path of the config file |
-| `current` | Name of the current style, or `null` |
+| `current` | Name of the current style, or `null` if there is none |
 | `folders` | List of folder names containing styles |
 | `styles` | List of styles (see below) |
 | `components` | Names of all configured components |
@@ -123,7 +127,11 @@ To install **hyprstyle**, run this command in your desired shell:
 `curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh`
 
 # Update guide
-Whenever a new version is out, hyprstyle will let you know the next time you run a command (the notice is printed to stderr). The check runs in the background and is cached for 12 hours. To update, run:
+Every command that runs checks, at most once every 5 minutes, whether a new release is out. The check is a single small request that runs in a background process, so it never slows the command you actually ran.
+
+When the background check finds a new version, you get a desktop notification (through `notify-send`), once per version. After that, every command prints a one-line notice to stderr until you update. The notice disappears as soon as you're on the new version.
+
+To update, run:
 
 `hyprstyle update`
 
