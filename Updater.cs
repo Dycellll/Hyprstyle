@@ -119,6 +119,13 @@ static class Updater
         if (cache.Latest != null && IsNewer(cache.Latest, CurrentVersion))
             Console.Error.WriteLine(NoticeText(cache.Latest));
 
+        CheckInBackground();
+    }
+
+    public static void CheckInBackground()
+    {
+        var cache = ReadCache();
+
         if (DateTimeOffset.UtcNow - cache.CheckedAt < CheckInterval)
             return;
 

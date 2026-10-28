@@ -31,6 +31,7 @@ static partial class Gui
             property string status: ""
             property string confirming: ""
             property string lastCommand: ""
+            property string lastJson: ""
             property bool hidden: false
             property bool revealed: false
             property bool started: false
@@ -204,6 +205,11 @@ static partial class Gui
                 command: ["@BIN@", "json"]
                 stdout: StdioCollector {
                     onStreamFinished: {
+                        if (text === win.lastJson)
+                            return
+
+                        win.lastJson = text
+
                         try {
                             const offset = grid.contentY
                             win.info = JSON.parse(text)
@@ -253,6 +259,7 @@ static partial class Gui
                     if (["save", "setpreview", "deletepreview"].includes(win.lastCommand))
                         win.stamp++
 
+                    win.lastJson = ""
                     loader.running = true
                 }
             }
@@ -280,6 +287,22 @@ static partial class Gui
                 id: closer
                 interval: 220
                 onTriggered: Qt.quit()
+            }
+
+            Timer {
+                id: poll
+                interval: 3000
+                repeat: true
+                running: true
+                property int left: 10
+
+                onTriggered: {
+                    if (--left <= 0)
+                        running = false
+
+                    if (!loader.running)
+                        loader.running = true
+                }
             }
 
             Connections {

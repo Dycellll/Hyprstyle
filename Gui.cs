@@ -10,6 +10,8 @@ static partial class Gui
         Directory.CreateDirectory(directory);
         File.WriteAllText(file, Source.Replace("@BIN@", Environment.ProcessPath ?? "hyprstyle"));
 
+        Updater.CheckInBackground();
+
         try
         {
             Processes.Run("quickshell", ["-p", file]);
