@@ -142,7 +142,7 @@ PanelWindow {
             win.visible = true
             win.revealed = true
 
-            if (["save", "setpreview", "deletepreview"].includes(win.lastCommand))
+            if (["save", "undo", "setpreview", "deletepreview"].includes(win.lastCommand))
                 win.stamp++
 
             win.lastJson = ""
@@ -333,6 +333,7 @@ PanelWindow {
                         Muted {
                             Layout.fillWidth: true
                             text: "Version " + win.info.latestVersion + " is out (you have " + win.info.version + ")"
+                            elide: Text.ElideRight
                         }
 
                         Btn {

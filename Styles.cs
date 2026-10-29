@@ -3,6 +3,8 @@ static class Styles
     public const string Marker = ".style";
     public const string PreviewFile = ".preview.png";
     private const string AliasesFile = ".aliases";
+    private const string DescriptionFile = ".description";
+    public const int MaxDescriptionLength = 60;
 
     private static string CurrentLink => Path.Join(Config.StyleDir, "current");
 
@@ -94,6 +96,26 @@ static class Styles
             File.Delete(file);
         else
             File.WriteAllLines(file, aliases);
+    }
+
+    public static string CleanDescription(string text) =>
+        string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    public static string ReadDescription(string stylePath)
+    {
+        string file = Path.Join(stylePath, DescriptionFile);
+
+        return File.Exists(file) ? CleanDescription(File.ReadAllText(file)) : "";
+    }
+
+    public static void WriteDescription(string stylePath, string description)
+    {
+        string file = Path.Join(stylePath, DescriptionFile);
+
+        if (description == "")
+            File.Delete(file);
+        else
+            File.WriteAllText(file, description);
     }
 
     public static string? CurrentPath()

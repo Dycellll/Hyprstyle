@@ -2,6 +2,11 @@ static partial class Changelogs
 {
     private static void Register()
     {
+        AddChangelog("v1.5.0",
+            """
+            - Styles can now have a short description, up to 60 characters. Set one with "hyprstyle description <name> <description>" or in the GUI's details panel. It shows up in "hyprstyle list" and under the style's name in the GUI.
+            - Added "hyprstyle undo", and an Undo button in the GUI. It reverts your last load or save, and only remembers that one action.
+            """);
         AddChangelog("v1.4.0",
             """
             - Added a Components tab in the GUI. Add, edit and remove your components there instead of editing config.json by hand.

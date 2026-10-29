@@ -43,7 +43,7 @@ The first time you run a command, hyprstyle writes a starter config to `~/.confi
 
 | Command | What it does |
 |---|---|
-| `hyprstyle list` | Lists your styles, grouped by folder, with their aliases. The loaded one is marked with a ★ |
+| `hyprstyle list` | Lists your styles, grouped by folder, with their aliases and descriptions. The loaded one is marked with a ★ |
 | `hyprstyle current` | Prints the current style's name, or nothing if there isn't one. Useful for other programs to read and display |
 | `hyprstyle save <name>` | Saves a new style, or replaces an existing one (aliases are kept). Takes a preview with `grim` if it's installed, and the style becomes the current one. You can also save styles in folders (`folder/name`) |
 | `hyprstyle set <name\|alias>` | Loads a style |
@@ -51,6 +51,8 @@ The first time you run a command, hyprstyle writes a starter config to `~/.confi
 | `hyprstyle rename <name> <new_name>` | Renames a style. A new name with a folder (`folder/new_name`) moves it there |
 | `hyprstyle alias <name> <alias>` | Gives a style an alias you can use in `set` |
 | `hyprstyle deletealias <name> <alias>` | Removes an alias |
+| `hyprstyle description <name> [description]` | Sets a short description for a style (up to 60 characters), shown in `list` and in the GUI. Leave it out to remove the description |
+| `hyprstyle undo` | Undoes the last `set` or `save`. Loading a style goes back to your previous setup, saving puts the old version back, or deletes the style if it's new. Only the most recent action is remembered |
 | `hyprstyle setpreview [name] [image]` | Sets a style's preview from an image (path or `file://` URL), or from a `grim` screenshot if you don't give one. Defaults to the current style |
 | `hyprstyle deletepreview [name]` | Removes a preview. Defaults to the current style |
 | `hyprstyle delete <name>` | Deletes a style. Give it only a folder name, and the whole folder gets deleted |
@@ -66,11 +68,13 @@ For `setpreview`, a single argument is treated as a style name if one matches, a
 
 ## Styles
 
-- Styles live in `styleDir` (`~/.config/hyprstyle/styles` by default). Each one is a folder holding one saved item per component, plus a `.style` marker and, if set, `.aliases` and `.preview.png`.
+- Styles live in `styleDir` (`~/.config/hyprstyle/styles` by default). Each one is a folder holding one saved item per component, plus a `.style` marker and, if set, `.aliases`, `.description` and `.preview.png`.
 - A name can contain `/` to organize styles into folders, like `hyprstyle save dark/nord`. Folders show up as groups in `hyprstyle list` and in the GUI's sidebar, and only exist while they hold styles, otherwise get automatically deleted.
 - A name can't be empty, can't be `current`, can't be an absolute path, and none of its parts can be empty or start with a dot.
 - Aliases can't be empty, start with a dot, or contain spaces or slashes. Two styles can't share an alias, and an alias can't match a style's name.
 - Saving over a name that's already a folder, or that sits inside another style, is refused, so a save can never wipe out other styles.
+- Descriptions are a single line of up to 60 characters. Saving over a style keeps its description, just like its aliases.
+- Before every `set`, `reload` and `save`, hyprstyle keeps what it needs to undo it in `~/.config/hyprstyle/undo/`: a snapshot of your current setup for a load, or the old copy of the style for a save. Each new action replaces the last one, and renaming or deleting a style that a save-undo points to forgets it.
 - Deleting the current style leaves you with no current style (very intuitive). `styleDir/current` is a symlink to the loaded one.
 
 ## The GUI
@@ -81,7 +85,8 @@ For `setpreview`, a single argument is treated as a style name if one matches, a
 
 - **Search** by name or alias, and a **folder sidebar** when you have folders.
 - **Click** a style to select it, **double-click** to apply it. The current one has a dot.
-- The **details panel** has Apply / Reapply, Update with current setup, preview image controls, aliases, rename, and delete.
+- The **details panel** has Apply / Reapply, Update with current setup, description, preview image controls, aliases, rename, and delete. Descriptions also show in small text under each style's name.
+- **Undo load** / **Undo save** appears next to the save box after you apply or save a style, and reverts it.
 - **Save current setup as...** in the top right saves a new style. The GUI hides for a moment so it isn't in the preview screenshot.
 - An **Update** button shows up when a new version is out.
 
@@ -220,6 +225,7 @@ hyprstyle json | jq '.styles[].name'
 | `version` | Installed version |
 | `latestVersion` | Latest known release (from the update cache), or `null` |
 | `updateAvailable` | `true` if `latestVersion` is newer than `version` |
+| `undo` | What `hyprstyle undo` would revert, as `{ "type": "set" or "save", "style": name }`, or `null` if there's nothing to undo |
 | `styleDir` | Absolute path of the style directory |
 | `configPath` | Path of the config file |
 | `current` | Name of the current style, or `null` |
@@ -239,6 +245,7 @@ Each entry in `styles`:
 | `path` | Absolute path |
 | `current` | Whether it's the current style |
 | `aliases` | Its aliases |
+| `description` | Its description, or `""` |
 | `preview` | Absolute path of the preview image, or `null` |
 | `savedAt` | UTC time it was saved |
 
@@ -248,11 +255,13 @@ The GUI saves components through `hyprstyle --save-components '<json>'`, where t
 
 Every command checks for a new release at most once every 5 minutes, in a background process that never slows down what you ran. When one is found you get a desktop notification (once per version), and every command prints a one-line notice until you update.
 
+To update, run:
+
 ```sh
 hyprstyle update
 ```
 
-or with the install script directly:
+or, if you'd rather use the install script directly:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Dycellll/hyprstyle/main/install.sh | sh -s -- --update

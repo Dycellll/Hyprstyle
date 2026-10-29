@@ -8,7 +8,10 @@ static class StyleManager
         var aliases = Styles.ReadAliases(style);
         string name = Path.GetFileName(style);
 
-        return aliases.Count == 0 ? name : $"{name} ({string.Join(", ", aliases)})";
+        string label = aliases.Count == 0 ? name : $"{name} ({string.Join(", ", aliases)})";
+        string description = Styles.ReadDescription(style);
+
+        return description == "" ? label : $"{label} - {description}";
     }
 
     public static void ListStyles()
@@ -102,11 +105,14 @@ static class StyleManager
         }
 
         var aliases = Styles.ReadAliases(path);
+        string description = Styles.ReadDescription(path);
 
+        Undo.BeginSave(name, path);
         Files.DeleteDirectory(path);
         Directory.CreateDirectory(path);
         File.Create(Path.Join(path, Styles.Marker)).Dispose();
         Styles.WriteAliases(path, aliases);
+        Styles.WriteDescription(path, description);
 
         int total = Config.Components.Count;
         int done = 0;
@@ -152,8 +158,15 @@ static class StyleManager
             return;
         }
 
+        Undo.BeginSet(Styles.NameOf(path));
         Styles.SetCurrent(path);
+        ApplyComponents(path);
 
+        Cli.Finish($"Applied style: {Styles.NameOf(path)}");
+    }
+
+    public static void ApplyComponents(string path)
+    {
         var hyprNames = Config.HyprConfigComponents;
         var hyprFirst = Config.Components.Where(c => hyprNames.Contains(c.Name)).ToList();
         var hyprRest = Config.Components.Where(c => !hyprNames.Contains(c.Name)).ToList();
@@ -173,8 +186,6 @@ static class StyleManager
         );
 
         Hyprland.Reload();
-
-        Cli.Finish($"Applied style: {Styles.NameOf(path)}");
     }
 
     public static void ReloadStyle()
@@ -234,6 +245,7 @@ static class StyleManager
 
         bool wasCurrent = Styles.IsCurrent(path);
 
+        Undo.Forget(Styles.NameOf(path));
         Files.EnsureParent(target);
         Directory.Move(path, target);
 
@@ -303,6 +315,33 @@ static class StyleManager
         Console.WriteLine($"Removed alias '{alias}' from {Styles.NameOf(path)}");
     }
 
+    public static void SetDescription(string name, string text)
+    {
+        string? path = Styles.FindStyle(name);
+
+        if (path == null)
+        {
+            Cli.Fail($"Style '{name}' does not exist.");
+            return;
+        }
+
+        string description = Styles.CleanDescription(text);
+
+        if (description.Length > Styles.MaxDescriptionLength)
+        {
+            Cli.Fail($"Descriptions can be at most {Styles.MaxDescriptionLength} characters, yours is {description.Length}.");
+            return;
+        }
+
+        Styles.WriteDescription(path, description);
+
+        Console.WriteLine(description == ""
+            ? $"Removed the description from {Styles.NameOf(path)}"
+            : $"Updated the description of {Styles.NameOf(path)}");
+    }
+
+    public static void UndoLast() => Undo.Perform();
+
     public static void DeleteStyle(string name)
     {
         name = name.TrimEnd('/');
@@ -323,6 +362,8 @@ static class StyleManager
 
         if (Styles.CurrentIsInside(path))
             Styles.ClearCurrent();
+
+        Undo.Forget(name);
 
         bool isStyle = Styles.IsStyle(path);
 
@@ -366,6 +407,18 @@ static class StyleManager
             else
                 json.WriteNull("current");
 
+            if (Undo.Read() is { } undo)
+            {
+                json.WriteStartObject("undo");
+                json.WriteString("type", undo.Type);
+                json.WriteString("style", undo.Style);
+                json.WriteEndObject();
+            }
+            else
+            {
+                json.WriteNull("undo");
+            }
+
             json.WriteStartArray("folders");
 
             foreach (var folder in styles
@@ -392,6 +445,7 @@ static class StyleManager
                 json.WriteString("folder", Path.GetDirectoryName(name) ?? "");
                 json.WriteString("path", style);
                 json.WriteBoolean("current", name == current);
+                json.WriteString("description", Styles.ReadDescription(style));
 
                 json.WriteStartArray("aliases");
 

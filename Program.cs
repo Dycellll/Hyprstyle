@@ -46,6 +46,14 @@ static class Program
                 StyleManager.RemoveAlias(args[1], args[2]);
                 break;
 
+            case "description" when args.Length >= 2:
+                StyleManager.SetDescription(args[1], string.Join(' ', args[2..]));
+                break;
+
+            case "undo" when args.Length == 1:
+                StyleManager.UndoLast();
+                break;
+
             case "delete" when args.Length == 2:
                 StyleManager.DeleteStyle(args[1]);
                 break;

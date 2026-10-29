@@ -178,11 +178,16 @@ static class Updater
 
         Console.WriteLine($"Updating {CurrentVersion} -> {Clean(latest)}...");
 
-        string script = $"f=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/{Repo}/HEAD/install.sh -o \"$f\" && sh \"$f\" --update; code=$?; rm -f \"$f\"; exit $code";
-
-        int exitCode = Processes.Run("sh", ["-c", script]);
+        int exitCode = UpdateFromGitHub();
 
         if (exitCode != 0)
             Environment.ExitCode = exitCode;
+    }
+
+    private static int UpdateFromGitHub()
+    {
+        string script = $"f=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/{Repo}/HEAD/install.sh -o \"$f\" && sh \"$f\" --update; code=$?; rm -f \"$f\"; exit $code";
+
+        return Processes.Run("sh", ["-c", script]);
     }
 }

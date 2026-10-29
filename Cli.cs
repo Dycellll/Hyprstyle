@@ -59,6 +59,8 @@ static class Cli
               hyprstyle rename <name> <new_name> -- Rename a saved style.
               hyprstyle alias <name> <alias> -- Give a style an alias.
               hyprstyle deletealias <name> <alias> -- Remove an alias from a style.
+              hyprstyle description <name> [description] -- Set a short description (up to 60 characters) for a style, or remove it if none is given.
+              hyprstyle undo -- Undo the last "set" or "save".
               hyprstyle setpreview [name] [image] -- Set a style's preview from an image, or from a screenshot if no image is given. Defaults to the current style.
               hyprstyle deletepreview [name] -- Remove a style's preview. Defaults to the current style.
               hyprstyle delete <name> -- Delete a saved style.

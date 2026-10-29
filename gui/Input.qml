@@ -6,6 +6,7 @@ Rectangle {
     property string hint: ""
     property bool error: false
     property int fontSize: 13
+    property alias maxLength: edit.maximumLength
     signal accepted()
     signal edited()
 

@@ -5,6 +5,8 @@ Item {
     id: root
     required property var shell
     property alias grid: grid
+    property string descName: ""
+    property string descText: ""
 
     function saveCurrent() {
         const name = saveName.text.trim()
@@ -13,6 +15,12 @@ Item {
         shell.pending = name
         saveName.text = ""
         shell.runHidden(["save", name])
+    }
+
+    function saveDescription() {
+        if (shell.selected === "")
+            return
+        shell.run(["description", shell.selected, descField.text.trim()])
     }
 
     ColumnLayout {
@@ -30,6 +38,12 @@ Item {
             }
 
             Item { Layout.fillWidth: true }
+
+            Btn {
+                visible: !!shell.info.undo
+                label: shell.info.undo && shell.info.undo.type === "save" ? "Undo save" : "Undo load"
+                onClicked: shell.run(["undo"])
+            }
 
             Input {
                 id: saveName
@@ -93,7 +107,8 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     cellWidth: Math.floor(width / Math.max(1, Math.floor(width / 210)))
                     readonly property real shotHeight: (cellWidth - 12) * 0.5625
-                    cellHeight: shotHeight + 46
+                    readonly property bool anyDescription: shell.shown.some(s => !!s.description)
+                    cellHeight: shotHeight + (anyDescription ? 62 : 46)
                     model: shell.shown
 
                     delegate: Item {
@@ -192,6 +207,20 @@ Item {
                                     font.pixelSize: 13
                                     elide: Text.ElideRight
                                 }
+                            }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: frame.bottom
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                anchors.topMargin: 29
+                                visible: !!tile.modelData.description
+                                text: tile.modelData.description || ""
+                                color: "#7c7c88"
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
                             }
 
                             MouseArea {
@@ -348,6 +377,46 @@ Item {
                                     }
                                     shell.confirming = ""
                                     shell.runHidden(["save", shell.selected])
+                                }
+                            }
+
+                            Muted {
+                                Layout.topMargin: 8
+                                text: "Description"
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+
+                                Input {
+                                    id: descField
+                                    Layout.fillWidth: true
+                                    hint: "A few words about it"
+                                    maxLength: 60
+                                    onAccepted: root.saveDescription()
+                                }
+
+                                Btn {
+                                    label: "Set"
+                                    enabled: descField.text.trim() !== root.descText
+                                    onClicked: root.saveDescription()
+                                }
+                            }
+
+                            Connections {
+                                target: shell
+
+                                function onShownStyleChanged() {
+                                    const style = shell.shownStyle
+                                    const name = style ? style.name : ""
+                                    const next = style ? (style.description || "") : ""
+
+                                    if (name !== root.descName || descField.text === root.descText)
+                                        descField.text = next
+
+                                    root.descName = name
+                                    root.descText = next
                                 }
                             }
 
