@@ -64,7 +64,7 @@ The first time you run a command, hyprstyle writes a starter config to `~/.confi
 
 Add `--no-transition` to `set`, `reload` or `undo` to skip the [transition](#transitions) for that run.
 
-Put `--timing` in front of any command, like `hyprstyle --timing set my-style` or `hyprstyle --timing save my-style`, to see how long every step took: the undo snapshot, each component, the Hyprland reloads, the transition setup and so on. It prints to stderr, with the time since start on the left and the duration of each step in brackets, and indented lines are the individual components inside a step. Components load in parallel, so their times overlap and add up to more than the step that contains them. It's meant for finding the component that slows your loads and saves down. Setting `HYPRSTYLE_TIMING=1` does the same.
+Put `--timing` in any command, like `hyprstyle set my-style --timing` or `hyprstyle save my-style --timing`, to see how long every step took: the undo snapshot, each component, the Hyprland reloads, the transition setup and so on. It prints to stderr, with the time since start on the left and the duration of each step in brackets, and indented lines are the individual components inside a step. Components load in parallel, so their times overlap and add up to more than the step that contains them. It's meant for finding the component that slows your loads and saves down. Setting `HYPRSTYLE_TIMING=1` does the same.
 
 Running `hyprstyle` with no arguments, or with something it doesn't know, prints the usage text.
 

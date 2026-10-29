@@ -4,7 +4,7 @@ static partial class Changelogs
     {
         AddChangelog("v1.6.1",
             """
-            - Added "--timing". Put it before a command, like "hyprstyle --timing set my-style", to see how long every step of a load or save took. Useful for optimizing your load/save times. Do note, they run in parallel, so the total time is not the sum of each step's time.
+            - Added "--timing". Put it in a command, like "hyprstyle set my-style --timing", to see how long every step of a load or save took. Useful for optimizing your load/save times. Do note, they run in parallel, so the total time is not the sum of each step's time.
             """);
         AddChangelog("v1.6.0",
             """
