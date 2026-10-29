@@ -14,15 +14,13 @@ abstract class StyleComponent
 sealed class CopyComponent : StyleComponent
 {
     private readonly string source;
-    private readonly bool isDirectory;
     private readonly string? saveHook;
     private readonly string? loadHook;
 
-    public CopyComponent(string name, string source, bool isDirectory, string? saveHook, string? loadHook)
+    public CopyComponent(string name, string source, string? saveHook, string? loadHook)
         : base(name)
     {
         this.source = source;
-        this.isDirectory = isDirectory;
         this.saveHook = saveHook;
         this.loadHook = loadHook;
     }
@@ -32,15 +30,14 @@ sealed class CopyComponent : StyleComponent
         if (string.IsNullOrEmpty(source))
             return;
 
-        if (!File.Exists(source) && !Directory.Exists(source))
-            return;
-
         string destination = Path.Join(stylePath, Name);
 
-        if (isDirectory)
+        if (Directory.Exists(source))
             Files.CopyDirectory(source, destination);
-        else
+        else if (File.Exists(source))
             Files.CopyFile(source, destination);
+        else
+            return;
 
         Processes.RunHook(saveHook, stylePath, Name);
     }
@@ -52,13 +49,12 @@ sealed class CopyComponent : StyleComponent
 
         string saved = Path.Join(stylePath, Name);
 
-        if (!File.Exists(saved) && !Directory.Exists(saved))
-            return;
-
-        if (isDirectory)
+        if (Directory.Exists(saved))
             Files.ReplaceDirectory(saved, source);
-        else
+        else if (File.Exists(saved))
             Files.CopyFile(saved, source);
+        else
+            return;
 
         Processes.RunHook(loadHook, stylePath, Name);
     }

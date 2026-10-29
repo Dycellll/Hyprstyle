@@ -25,7 +25,7 @@ static class Updater
 
     public static string Clean(string version) => version.Trim().TrimStart('v', 'V');
 
-    private static Version? Parse(string text)
+    public static Version? Parse(string text)
     {
         text = Clean(text);
 

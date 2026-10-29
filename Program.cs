@@ -87,6 +87,14 @@ static class Program
                 Console.WriteLine(Updater.CurrentVersion);
                 return true;
 
+            case "changelogs" when args.Length == 1:
+                Changelogs.Print();
+                return true;
+
+            case "--save-components" when args.Length == 2:
+                Config.SaveComponents(args[1]);
+                return true;
+
             case "--refresh-update-cache":
                 Updater.RefreshCache();
                 return true;

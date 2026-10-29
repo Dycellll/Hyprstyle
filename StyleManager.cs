@@ -417,6 +417,34 @@ static class StyleManager
                 json.WriteStringValue(component.Name);
 
             json.WriteEndArray();
+
+            json.WriteStartArray("componentConfigs");
+
+            foreach (var component in Config.ComponentConfigs)
+            {
+                json.WriteStartObject();
+                json.WriteString("name", component.Name);
+                json.WriteString("type", component.Type);
+                json.WriteString("source", component.Source);
+                json.WriteString("saveHook", component.SaveHook);
+                json.WriteString("loadHook", component.LoadHook);
+                json.WriteBoolean("hyprConfig", Config.HyprConfigComponents.Contains(component.Name));
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
+
+            json.WriteStartArray("changelogs");
+
+            foreach (var entry in Changelogs.Released)
+            {
+                json.WriteStartObject();
+                json.WriteString("version", $"v{entry.Version}");
+                json.WriteString("log", entry.Log);
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
             json.WriteEndObject();
         }
 

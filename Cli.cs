@@ -65,6 +65,7 @@ static class Cli
               hyprstyle gui -- Open the quickshell GUI.
               hyprstyle json -- Print all style data as JSON.
               hyprstyle update -- Update hyprstyle to the latest release.
+              hyprstyle changelogs -- Show what changed in every version up to the one you have.
               hyprstyle version -- Print the installed version.
 
             Config: ~/.config/hyprstyle/config.json
