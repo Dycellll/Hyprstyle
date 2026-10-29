@@ -242,7 +242,10 @@ Each entry in `components`:
   "hyprConfigComponents": [
     "hyprrules.lua",
     "hyprlook.lua"
-  ]
+  ],
+
+  "transition": "circle",
+  "transitionMs": 600
 }
 ```
 
