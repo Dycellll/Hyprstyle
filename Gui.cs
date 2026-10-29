@@ -60,7 +60,7 @@ static class Gui
         File.WriteAllLines(stampPath, installed.Select(pair => $"{pair.Key}\t{pair.Value}"));
     }
 
-    private static byte[] ReadResource(Assembly assembly, string resource)
+    public static byte[] ReadResource(Assembly assembly, string resource)
     {
         using var stream = assembly.GetManifestResourceStream(resource)
             ?? throw new Exception($"Missing bundled file {resource}");

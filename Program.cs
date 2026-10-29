@@ -2,6 +2,22 @@ static class Program
 {
     static void Main(string[] args)
     {
+        if (args.Contains("--timing"))
+        {
+            Timing.Enabled = true;
+            args = args.Where(a => a != "--timing").ToArray();
+        }
+
+        Timing.Mark("start");
+
+        if (args.Contains("--no-transition"))
+        {
+            Transition.Disabled = true;
+            args = args.Where(a => a != "--no-transition").ToArray();
+        }
+
+        ThreadPool.SetMinThreads(Math.Max(Environment.ProcessorCount, 8), 8);
+
         if (args.Length == 0)
         {
             Config.EnsureExists();
@@ -81,6 +97,8 @@ static class Program
 
         if (showNotice)
             Updater.ShowNotice();
+
+        Timing.Mark("done");
     }
 
     private static bool RunQuickCommand(string[] args)
@@ -101,6 +119,10 @@ static class Program
 
             case "--save-components" when args.Length == 2:
                 Config.SaveComponents(args[1]);
+                return true;
+
+            case "--save-transition" when args.Length == 3:
+                Config.SaveTransition(args[1], args[2]);
                 return true;
 
             case "--refresh-update-cache":

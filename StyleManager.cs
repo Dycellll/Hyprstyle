@@ -107,12 +107,16 @@ static class StyleManager
         var aliases = Styles.ReadAliases(path);
         string description = Styles.ReadDescription(path);
 
-        Undo.BeginSave(name, path);
-        Files.DeleteDirectory(path);
-        Directory.CreateDirectory(path);
-        File.Create(Path.Join(path, Styles.Marker)).Dispose();
-        Styles.WriteAliases(path, aliases);
-        Styles.WriteDescription(path, description);
+        Timing.Measure("undo snapshot", () => Undo.BeginSave(name, path));
+
+        Timing.Measure("prepare style folder", () =>
+        {
+            Files.DeleteDirectory(path);
+            Directory.CreateDirectory(path);
+            File.Create(Path.Join(path, Styles.Marker)).Dispose();
+            Styles.WriteAliases(path, aliases);
+            Styles.WriteDescription(path, description);
+        });
 
         int total = Config.Components.Count;
         int done = 0;
@@ -122,7 +126,7 @@ static class StyleManager
             try
             {
                 Cli.Progress("Saving", component.Name, ++done, total);
-                component.Save(path);
+                Timing.Measure($"  save {component.Name}", () => component.Save(path));
             }
             catch (Exception e)
             {
@@ -130,21 +134,26 @@ static class StyleManager
             }
         }
 
-        Previews.Capture(path);
-        Styles.SetCurrent(path);
+        Timing.Measure("preview", () => Previews.Capture(path));
+        Timing.Measure("set current", () => Styles.SetCurrent(path));
         Cli.Finish($"Saved style: {name}");
     }
 
-    private static void LoadComponent(StyleComponent component, string path, int number, int total)
+    private static void LoadComponent(StyleComponent component, string path, int number, int total, List<string> failures)
     {
         try
         {
             Cli.Progress("Applying", component.Name, number, total);
-            component.Load(path);
+            Timing.Measure($"  load {component.Name}", () => component.Load(path));
         }
         catch (Exception e)
         {
-            Cli.Error($"Failed {component.Name}: {e.Message}");
+            string message = $"Failed {component.Name}: {e.Message}";
+
+            Cli.Error(message);
+
+            lock (failures)
+                failures.Add(message);
         }
     }
 
@@ -158,8 +167,8 @@ static class StyleManager
             return;
         }
 
-        Undo.BeginSet(Styles.NameOf(path));
-        Styles.SetCurrent(path);
+        Timing.Measure("undo snapshot", () => Undo.BeginSet(Styles.NameOf(path)));
+        Timing.Measure("set current", () => Styles.SetCurrent(path));
         ApplyComponents(path);
 
         Cli.Finish($"Applied style: {Styles.NameOf(path)}");
@@ -167,25 +176,43 @@ static class StyleManager
 
     public static void ApplyComponents(string path)
     {
+        using var transition = Config.Components.Count > 0 ? Timing.Measure("transition start", Transition.Begin) : null;
+
         var hyprNames = Config.HyprConfigComponents;
         var hyprFirst = Config.Components.Where(c => hyprNames.Contains(c.Name)).ToList();
         var hyprRest = Config.Components.Where(c => !hyprNames.Contains(c.Name)).ToList();
 
         int total = Config.Components.Count;
         int done = 0;
+        int finished = 0;
+        var failures = new List<string>();
 
-        foreach (var component in hyprFirst)
-            LoadComponent(component, path, ++done, total);
+        void Load(StyleComponent component)
+        {
+            LoadComponent(component, path, Interlocked.Increment(ref done), total, failures);
+            transition?.Progress(Interlocked.Increment(ref finished), total);
+        }
 
-        Hyprland.Reload();
+        bool single = Config.SingleHyprReload;
 
-        Parallel.ForEach(
-            hyprRest,
-            new ParallelOptions { MaxDegreeOfParallelism = Math.Max(hyprRest.Count, 1) },
-            component => LoadComponent(component, path, Interlocked.Increment(ref done), total)
-        );
+        // Hyprland config files first, so the reload below sees all of them.
+        Timing.Measure("hypr config components", () => Concurrent.ForEach(hyprFirst, Load));
 
-        Hyprland.Reload();
+        // Nothing Hyprland reads changed, so there's nothing to reload yet.
+        if (!single && hyprFirst.Count > 0)
+            Timing.Measure("hyprctl reload #1", Hyprland.Reload);
+
+        Timing.Measure("other components", () => Concurrent.ForEach(hyprRest, Load));
+
+        if (Config.Components.Count > 0)
+            Timing.Measure("hyprctl reload #2", Hyprland.Reload);
+
+        transition?.Reveal();
+        Timing.Mark("hooks done");
+
+        // Failures are always shown on the CLI (above); also surface them as notifications.
+        if (failures.Count > 0)
+            Cli.NotifyAll(failures.Select(f => $"hyprstyle: {f}").ToList());
     }
 
     public static void ReloadStyle()
@@ -401,6 +428,8 @@ static class StyleManager
             json.WriteBoolean("updateAvailable", latest != null && Updater.IsNewer(latest, Updater.CurrentVersion));
             json.WriteString("styleDir", Config.StyleDir);
             json.WriteString("configPath", Config.ConfigPath);
+            json.WriteString("transition", Config.Transition);
+            json.WriteNumber("transitionMs", Config.TransitionMs);
 
             if (current != null)
                 json.WriteString("current", current);

@@ -48,6 +48,19 @@ static class Processes
     public static Process Start(string command, params string[] args) =>
         Process.Start(Prepare(command, args, true)) ?? throw new Exception($"Failed to start {command}");
 
+    public static void StartDetached(string command, string[] args, string envKey, string envValue)
+    {
+        var psi = Prepare(command, args, false);
+        psi.Environment[envKey] = envValue;
+
+        Process.Start(psi)?.Dispose();
+    }
+
+    public static bool OnPath(string command) =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(':', StringSplitOptions.RemoveEmptyEntries)
+            .Any(dir => File.Exists(Path.Join(dir, command)));
+
     public static bool IsRunning(string processName) =>
         Process.GetProcessesByName(processName).Length > 0;
 
@@ -70,12 +83,19 @@ static class Processes
         using var process = Process.Start(psi)
             ?? throw new Exception("Failed to start hook shell");
 
+        // Drain both pipes concurrently so chatty hooks can't deadlock on a full pipe buffer.
+        // We never wait on the pipes after the shell exits: a hook that backgrounds a long-lived
+        // program (e.g. "waybar &") leaves it holding them open.
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+
         process.WaitForExit();
 
         if (process.ExitCode != 0)
         {
-            string stderr = process.StandardError.ReadToEnd().Trim();
-            throw new Exception($"hook exited with code {process.ExitCode}{(stderr == "" ? "" : $": {stderr}")}");
+            stderr.Wait(100);
+            string text = stderr.IsCompletedSuccessfully ? stderr.Result.Trim() : "";
+            throw new Exception($"hook exited with code {process.ExitCode}{(text == "" ? "" : $": {text}")}");
         }
     }
 }

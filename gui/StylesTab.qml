@@ -8,6 +8,19 @@ Item {
     property string descName: ""
     property string descText: ""
 
+    property string lastKind: "circle"
+    readonly property string savedKind: shell.info.transition || "circle"
+
+    onSavedKindChanged: {
+        if (savedKind !== "none")
+            lastKind = savedKind
+    }
+
+    function saveTransition(kind) {
+        const ms = parseInt(msBox.text.trim())
+        shell.run(["--save-transition", kind, String(isNaN(ms) ? 600 : ms)])
+    }
+
     function saveCurrent() {
         const name = saveName.text.trim()
         if (name === "")
@@ -30,6 +43,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+            z: 1
 
             Input {
                 Layout.preferredWidth: 220
@@ -39,10 +53,35 @@ Item {
 
             Item { Layout.fillWidth: true }
 
+            Muted { text: "Transition" }
+
+            Toggle {
+                checked: root.savedKind !== "none"
+                onToggled: value => root.saveTransition(value ? root.lastKind : "none")
+            }
+
+            Dropdown {
+                options: ["circle", "circle-centered", "horizontal", "vertical", "diagonal"]
+                current: root.savedKind === "none" ? root.lastKind : root.savedKind
+                enabled: root.savedKind !== "none"
+                onPicked: value => root.saveTransition(value)
+            }
+
+            Input {
+                id: msBox
+                Layout.preferredWidth: 56
+                maxLength: 4
+                text: String(shell.info.transitionMs || 600)
+                enabled: root.savedKind !== "none"
+                onAccepted: root.saveTransition(root.savedKind)
+            }
+
+            Muted { text: "ms" }
+
             Btn {
                 visible: !!shell.info.undo
                 label: shell.info.undo && shell.info.undo.type === "save" ? "Undo save" : "Undo load"
-                onClicked: shell.run(["undo"])
+                onClicked: shell.info.undo.type === "save" ? shell.run(["undo"]) : shell.runLoad(["undo"])
             }
 
             Input {
@@ -230,7 +269,7 @@ Item {
                                 onClicked: shell.selected = tile.modelData.name
                                 onDoubleClicked: {
                                     shell.selected = tile.modelData.name
-                                    shell.run(["set", tile.modelData.name])
+                                    shell.runLoad(["set", tile.modelData.name])
                                 }
                             }
                         }
@@ -363,7 +402,7 @@ Item {
                                 Layout.fillWidth: true
                                 accent: true
                                 label: shell.shownStyle && shell.shownStyle.current ? "Reapply" : "Apply"
-                                onClicked: shell.run(["set", shell.selected])
+                                onClicked: shell.runLoad(["set", shell.selected])
                             }
 
                             Btn {

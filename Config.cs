@@ -17,8 +17,13 @@ sealed class AppSettings
 {
     public AppSettings() {}
     public string StyleDir { get; set; } = "~/.config/hyprstyle/styles";
+    public string Transition { get; set; } = "circle";
+    public int TransitionMs { get; set; } = 600;
     public List<ComponentConfig> Components { get; set; } = [];
     public List<string> HyprConfigComponents { get; set; } = [];
+
+    // Opt-in: reload Hyprland once (after everything loaded) instead of before and after.
+    public bool SingleHyprReload { get; set; }
 }
 
 [JsonSourceGenerationOptions(
@@ -41,7 +46,20 @@ static class Config
 
     public static string StyleDir => Expand(Settings.StyleDir);
 
-    public static HashSet<string> HyprConfigComponents => new(Settings.HyprConfigComponents);
+    private static HashSet<string>? hyprConfigComponents;
+
+    public static HashSet<string> HyprConfigComponents => hyprConfigComponents ??= new(Settings.HyprConfigComponents);
+
+    public static bool SingleHyprReload => Settings.SingleHyprReload;
+
+    private static readonly string[] Transitions =
+        ["circle", "circle-centered", "horizontal", "vertical", "diagonal", "none"];
+
+    public static string Transition => Transitions.Contains(Settings.Transition.ToLowerInvariant())
+        ? Settings.Transition.ToLowerInvariant()
+        : "circle";
+
+    public static int TransitionMs => Math.Clamp(Settings.TransitionMs, 100, 3000);
 
     public static List<StyleComponent> Components => components ??= Settings.Components
         .Select(BuildComponent)
@@ -100,6 +118,9 @@ static class Config
 
     private static string DropRemovedOptions(string text)
     {
+        if (!text.Contains("isDirectory", StringComparison.Ordinal))
+            return text;
+
         string? cleaned = JsonText.RemoveProperty(text, "isDirectory");
 
         if (cleaned == null)
@@ -186,6 +207,43 @@ static class Config
         Console.WriteLine(entries.Count == 1 ? "Saved 1 component" : $"Saved {entries.Count} components");
     }
 
+    public static void SaveTransition(string type, string ms)
+    {
+        if (!Transitions.Contains(type) || !int.TryParse(ms, out int value))
+        {
+            Cli.Fail("Couldn't read the transition settings.");
+            return;
+        }
+
+        EnsureExists();
+
+        string text = File.ReadAllText(ConfigPath);
+
+        string? updated = JsonText.SetTopLevelProperty(text, "transition", $"\"{type}\"");
+
+        if (updated != null)
+            updated = JsonText.SetTopLevelProperty(updated, "transitionMs", Math.Clamp(value, 100, 3000).ToString());
+
+        if (updated == null)
+        {
+            Cli.Fail($"Couldn't update {ConfigPath}. Is it valid JSON?");
+            return;
+        }
+
+        try
+        {
+            File.Copy(ConfigPath, ConfigPath + ".bak", overwrite: true);
+            File.WriteAllText(ConfigPath, updated);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Cli.Fail($"Couldn't write {ConfigPath}: {e.Message}");
+            return;
+        }
+
+        Console.WriteLine("Saved transition settings");
+    }
+
     public static string? ComponentProblem(List<ComponentConfig> entries)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -265,6 +323,14 @@ static class Config
 {
   // Where saved styles live.
   "styleDir": "~/.config/hyprstyle/styles",
+
+  // The animation played when a style loads: "circle" (grows from your
+  // cursor), "circle-centered", "horizontal", "vertical", "diagonal", or
+  // "none". Needs grim and quickshell.
+  "transition": "circle",
+
+  // How long the animation lasts, in milliseconds.
+  "transitionMs": 600,
 
   // Everything a style is made of. The easiest way to manage these is the
   // Components tab in the GUI (run: hyprstyle gui), but you can also edit

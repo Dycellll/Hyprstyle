@@ -46,6 +46,10 @@ static class Cli
         }
     }
 
+    // Sends several desktop notifications at once (one per message) and waits for them together.
+    public static void NotifyAll(IReadOnlyList<string> messages) =>
+        Concurrent.ForEach(messages, Notify);
+
     public static void Usage()
     {
         Console.WriteLine(
@@ -54,7 +58,7 @@ static class Cli
               hyprstyle list -- List all saved styles.
               hyprstyle current -- Get the current style name, or "" if there's none. Most useful for other programs to read the current style name.
               hyprstyle save <name> -- Save a new style or replace an existing one.
-              hyprstyle set <name|alias> -- Load a saved style.
+              hyprstyle set <name|alias> [--no-transition] -- Load a saved style. Add --no-transition to skip the animation (works on reload and undo too).
               hyprstyle reload -- Load the current style again.
               hyprstyle rename <name> <new_name> -- Rename a saved style.
               hyprstyle alias <name> <alias> -- Give a style an alias.
@@ -64,6 +68,7 @@ static class Cli
               hyprstyle setpreview [name] [image] -- Set a style's preview from an image, or from a screenshot if no image is given. Defaults to the current style.
               hyprstyle deletepreview [name] -- Remove a style's preview. Defaults to the current style.
               hyprstyle delete <name> -- Delete a saved style.
+              hyprstyle --timing <command> -- Run any command and print how long each of its steps took, for finding what slows your loads and saves down.
               hyprstyle gui -- Open the quickshell GUI.
               hyprstyle json -- Print all style data as JSON.
               hyprstyle update -- Update hyprstyle to the latest release.

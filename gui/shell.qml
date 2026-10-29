@@ -34,6 +34,8 @@ PanelWindow {
     property int tab: 0
     property bool changelogOpen: false
     property bool hidden: false
+    property bool holdShow: false
+    property bool quick: false
     property bool revealed: false
     property bool started: false
     property bool intro: true
@@ -138,9 +140,12 @@ PanelWindow {
             if (win.lastCommand === "--save-components")
                 componentsTab.saveFinished(exitCode === 0)
 
-            win.hidden = false
-            win.visible = true
-            win.revealed = true
+            if (win.holdShow) {
+                win.holdShow = false
+                showTimer.start()
+            } else {
+                win.show()
+            }
 
             if (["save", "undo", "setpreview", "deletepreview"].includes(win.lastCommand))
                 win.stamp++
@@ -155,6 +160,20 @@ PanelWindow {
         interval: 450
         property var args: []
         onTriggered: win.run(args)
+    }
+
+    Timer {
+        id: unmap
+        interval: 120
+        onTriggered: {
+            win.visible = false
+            delay.start()
+        }
+    }
+
+    Timer {
+        id: showTimer
+        onTriggered: win.show()
     }
 
     Timer {
@@ -232,12 +251,31 @@ PanelWindow {
         runner.running = true
     }
 
-    function runHidden(args) {
+    function show() {
+        quick = false
+        hidden = false
+        visible = true
+        revealed = true
+    }
+
+    function runHidden(args, wait) {
         hidden = true
+        quick = true
         revealed = false
-        visible = false
+        delay.interval = wait || 450
         delay.args = args
-        delay.start()
+        unmap.start()
+    }
+
+    function runLoad(args) {
+        if ((info.transition || "circle") === "none") {
+            run(args)
+            return
+        }
+
+        holdShow = true
+        showTimer.interval = (info.transitionMs || 600) + 500
+        runHidden(args, 40)
     }
 
     function setPreview(source) {
@@ -252,7 +290,7 @@ PanelWindow {
         color: "#88000000"
         opacity: win.revealed ? 1 : 0
 
-        Behavior on opacity { NumberAnimation { duration: 220 } }
+        Behavior on opacity { NumberAnimation { duration: win.quick ? 110 : 220 } }
 
         MouseArea {
             anchors.fill: parent
@@ -272,8 +310,8 @@ PanelWindow {
         opacity: win.revealed ? 1 : 0
         scale: win.revealed ? 1 : 0.96
 
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-        Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: win.quick ? 110 : 220; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: win.quick ? 110 : 280; easing.type: Easing.OutCubic } }
 
         MouseArea {
             anchors.fill: parent

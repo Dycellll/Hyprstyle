@@ -26,8 +26,8 @@ Hyprstyle doesn't care what's in your components. You describe them once, then `
 ## Requirements
 
 - **Hyprland** (`hyprctl` on your PATH)
-- **quickshell** *(optional)*: needed for `hyprstyle gui`
-- **grim** *(optional)*: takes the preview screenshots. Without it, styles just have no automatic preview
+- **quickshell** *(optional)*: needed for `hyprstyle gui` and for the load transition
+- **grim** *(optional)*: takes the preview screenshots, and the screenshots the load transition is made of. Without it, styles have no automatic preview and no transition
 - **libnotify** *(optional)*: desktop notifications for new versions, and for a missing `grim` or `quickshell`
 
 ## Getting started
@@ -62,6 +62,10 @@ The first time you run a command, hyprstyle writes a starter config to `~/.confi
 | `hyprstyle update` | Updates hyprstyle to the latest release |
 | `hyprstyle version` | Prints the installed version |
 
+Add `--no-transition` to `set`, `reload` or `undo` to skip the [transition](#transitions) for that run.
+
+Put `--timing` in front of any command, like `hyprstyle --timing set my-style` or `hyprstyle --timing save my-style`, to see how long every step took: the undo snapshot, each component, the Hyprland reloads, the transition setup and so on. It prints to stderr, with the time since start on the left and the duration of each step in brackets, and indented lines are the individual components inside a step. Components load in parallel, so their times overlap and add up to more than the step that contains them. It's meant for finding the component that slows your loads and saves down. Setting `HYPRSTYLE_TIMING=1` does the same.
+
 Running `hyprstyle` with no arguments, or with something it doesn't know, prints the usage text.
 
 For `setpreview`, a single argument is treated as a style name if one matches, and as an image path otherwise.
@@ -88,6 +92,7 @@ For `setpreview`, a single argument is treated as a style name if one matches, a
 - The **details panel** has Apply / Reapply, Update with current setup, description, preview image controls, aliases, rename, and delete. Descriptions also show in small text under each style's name.
 - **Undo load** / **Undo save** appears next to the save box after you apply or save a style, and reverts it.
 - **Save current setup as...** in the top right saves a new style. The GUI hides for a moment so it isn't in the preview screenshot.
+- **Transition** at the top turns the load animation on or off, picks its type, and sets its length in milliseconds (press Enter to apply a new length).
 - An **Update** button shows up when a new version is out.
 
 ### Components tab
@@ -108,6 +113,33 @@ The bar at the bottom of both tabs shows what's new in your version. Click it fo
 ### Customizing the GUI
 
 The GUI is a handful of plain `.qml` files that hyprstyle puts in `~/.config/hyprstyle/gui/` when you open it. Edit them and your changes stick. When a hyprstyle update ships a newer version of a file you edited, your copy is saved as `<file>.bak` and the new one takes its place. You may write your own GUI elsewhere, using `hyprstyle json`, although updates may add new features, so it's recommended you take a look at the base GUI every update.
+
+## Transitions
+
+Loading a style (`set`, `reload`, and `undo` of a load) plays a transition, so the switch doesn't flicker through half-applied states. Saving has none.
+
+1. hyprstyle takes a screenshot of every monitor with `grim`, and shows each one in a click-through quickshell overlay, in exactly the same place.
+2. The style loads as usual, under the overlay.
+3. Once the hooks are done and the desktop has stopped changing (hyprstyle watches `hyprctl clients` and `hyprctl layers`, for at most 2 seconds), the overlay animates away and reveals the live desktop.
+
+While the style loads, the frozen screenshot is dimmed slightly and a thin progress bar fills near the bottom as components finish. It only appears if the load takes more than a moment, and disappears as the reveal starts.
+
+It only works with pixels, so it works for any component. The overlay never takes mouse, scroll or keyboard input, so you can keep using your desktop while it plays. It closes itself if hyprstyle dies or something goes wrong, and it never lives longer than a few seconds beyond the load. If `grim` or `quickshell` is missing, the style just loads without it.
+
+| `transition` | Effect |
+|---|---|
+| `circle` | The new setup grows as a circle from where your cursor was. This is the default |
+| `circle-centered` | The same circle, but growing from the center of each monitor |
+| `horizontal` | The new setup wipes in from left to right |
+| `vertical` | The new setup wipes in from top to bottom |
+| `diagonal` | The new setup wipes in diagonally, from the top left corner to the bottom right one |
+| `none` | No transition |
+
+In the GUI's dropdown these show up as Circle, Circle (Centered), Horizontal and so on. The toggle next to it is the same as picking `none`.
+
+Set it, and how long it lasts (`transitionMs`), with the toggle, dropdown and field at the top of the GUI's Styles tab, or in `config.json`. The animation only starts after your style is done loading, so it looks the same however long your components take.
+
+Adding your own is a one-line change: each animation in `transition.qml` is a function that returns the revealed area for a given progress (a rectangle, optionally rounded or rotated). Add one to the `reveals` list there, then add its name to the lists in `Config.cs` and `gui/StylesTab.qml`. The file is bundled into hyprstyle, so rebuild after editing it.
 
 ## Components
 
@@ -143,6 +175,8 @@ Everything the Components tab does can also be done by editing `~/.config/hyprst
 | Option | Description |
 |---|---|
 | `styleDir` | Where styles live. `~` is expanded. Default `~/.config/hyprstyle/styles` |
+| `transition` | The load animation: `"circle"`, `"circle-centered"`, `"horizontal"`, `"vertical"`, `"diagonal"` or `"none"`. Default `"circle"`, see [Transitions](#transitions) |
+| `transitionMs` | How long the transition lasts, in milliseconds (100 to 3000). Default `600` |
 | `components` | The components, see below |
 | `hyprConfigComponents` | Names of the components that are Hyprland config files |
 
@@ -228,6 +262,8 @@ hyprstyle json | jq '.styles[].name'
 | `undo` | What `hyprstyle undo` would revert, as `{ "type": "set" or "save", "style": name }`, or `null` if there's nothing to undo |
 | `styleDir` | Absolute path of the style directory |
 | `configPath` | Path of the config file |
+| `transition` | The configured transition type |
+| `transitionMs` | The configured transition length in milliseconds |
 | `current` | Name of the current style, or `null` |
 | `folders` | Folders that contain styles |
 | `styles` | The styles, see below |

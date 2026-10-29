@@ -15,30 +15,126 @@ static class Files
         string tempPath = destination + ".tmp";
 
         File.Copy(source, tempPath, overwrite: true);
+
+        // Keep the source mtime so later copies can recognise "unchanged" by size + mtime.
+        File.SetLastWriteTimeUtc(tempPath, File.GetLastWriteTimeUtc(source));
         File.Move(tempPath, destination, overwrite: true);
     }
 
-    public static void CopyDirectory(string source, string destination)
+    private static bool Unchanged(FileInfo source, string destination)
     {
-        Directory.CreateDirectory(destination);
-
-        foreach (var directory in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+        try
         {
-            var relative = Path.GetRelativePath(source, directory);
-            Directory.CreateDirectory(Path.Join(destination, relative));
+            var target = new FileInfo(destination);
+
+            return target.Exists &&
+                target.LinkTarget == null &&
+                target.Length == source.Length &&
+                target.LastWriteTimeUtc == source.LastWriteTimeUtc;
         }
-
-        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        catch
         {
-            var relative = Path.GetRelativePath(source, file);
-            var destinationFile = Path.Join(destination, relative);
-
-            EnsureParent(destinationFile);
-            File.Copy(file, destinationFile, overwrite: true);
+            return false;
         }
     }
 
+    // Copies a file only if size or mtime differ.
+    public static void CopyFileIfChanged(string source, string destination)
+    {
+        if (!Unchanged(new FileInfo(source), destination))
+            CopyFile(source, destination);
+    }
+
+    private static int CopyParallelism => Math.Max(Environment.ProcessorCount, 2);
+
+    // Mirrors source into destination: copies new/changed files in parallel, skips unchanged ones.
+    // Returns the set of relative paths that exist in source (for pruning).
+    private static void MirrorInto(string source, string destination, out HashSet<string> files, out HashSet<string> dirs)
+    {
+        Directory.CreateDirectory(destination);
+
+        var fileSet = new HashSet<string>(StringComparer.Ordinal);
+        var dirSet = new HashSet<string>(StringComparer.Ordinal);
+        var work = new List<(string Source, string Target)>();
+
+        foreach (var entry in new DirectoryInfo(source).EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(source, entry.FullName);
+
+            if (entry is DirectoryInfo)
+            {
+                dirSet.Add(relative);
+                Directory.CreateDirectory(Path.Join(destination, relative));
+            }
+            else
+            {
+                fileSet.Add(relative);
+                work.Add((entry.FullName, Path.Join(destination, relative)));
+            }
+        }
+
+        Parallel.ForEach(
+            work,
+            new ParallelOptions { MaxDegreeOfParallelism = CopyParallelism },
+            item => CopyFileIfChanged(item.Source, item.Target));
+
+        files = fileSet;
+        dirs = dirSet;
+    }
+
+    public static void CopyDirectory(string source, string destination) =>
+        MirrorInto(source, destination, out _, out _);
+
+    // Replaces destination's contents with source's, touching only what differs.
+    // Falls back to the old stage-and-swap when destination is a symlink or a plain file.
     public static void ReplaceDirectory(string source, string destination)
+    {
+        var info = new DirectoryInfo(destination);
+
+        if (!info.Exists || info.LinkTarget != null)
+        {
+            ReplaceDirectorySwap(source, destination);
+            return;
+        }
+
+        HashSet<string> files, dirs;
+
+        try
+        {
+            MirrorInto(source, destination, out files, out dirs);
+        }
+        catch (IOException)
+        {
+            // Something at the destination clashes with the style (a file where a folder should
+            // be, a symlink, ...). Use the original stage-and-swap, which replaces it wholesale.
+            ReplaceDirectorySwap(source, destination);
+            return;
+        }
+
+        // Drop anything that isn't in the style anymore (the swap used to do this implicitly).
+        foreach (var entry in info.EnumerateFileSystemInfos("*", SearchOption.AllDirectories).ToList())
+        {
+            string relative = Path.GetRelativePath(destination, entry.FullName);
+
+            try
+            {
+                if (entry is DirectoryInfo dir)
+                {
+                    if (!dirs.Contains(relative) && dir.Exists)
+                        dir.Delete(recursive: true);
+                }
+                else if (!files.Contains(relative) && entry.Exists)
+                {
+                    entry.Delete();
+                }
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+        }
+    }
+
+    private static void ReplaceDirectorySwap(string source, string destination)
     {
         string parent = Path.GetDirectoryName(destination)
             ?? throw new Exception($"No parent directory for {destination}");
@@ -52,7 +148,7 @@ static class Files
 
         CopyDirectory(source, stagingDir);
 
-        if (Directory.Exists(destination))
+        if (Directory.Exists(destination) || new DirectoryInfo(destination).LinkTarget != null)
             Directory.Move(destination, backupDir);
 
         Directory.Move(stagingDir, destination);

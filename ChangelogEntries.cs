@@ -2,6 +2,17 @@ static partial class Changelogs
 {
     private static void Register()
     {
+        AddChangelog("v1.6.1",
+            """
+            - Added "--timing". Put it before a command, like "hyprstyle --timing set my-style", to see how long every step of a load or save took. Useful for optimizing your load/save times. Do note, they run in parallel, so the total time is not the sum of each step's time.
+            """);
+        AddChangelog("v1.6.0",
+            """
+            - Loading a style now plays a transition.
+            - Pick between "circle" (grows from your cursor), "circle-centered", "horizontal", "vertical" and "diagonal", and set how long it lasts, in the GUI or with "transition" and "transitionMs" in config.json. Turn it off with "none", the GUI toggle, or --no-transition.
+            - While a style loads, a subtle progress bar shows under the frozen screenshot, so the screen never just sits there.
+            - The transition needs grim and quickshell. If either is missing, styles load as before.
+            """);
         AddChangelog("v1.5.0",
             """
             - Styles can now have a short description, up to 60 characters. Set one with "hyprstyle description <name> <description>" or in the GUI's details panel. It shows up in "hyprstyle list" and under the style's name in the GUI.

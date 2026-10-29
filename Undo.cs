@@ -54,16 +54,19 @@ static class Undo
         Reset();
         Directory.CreateDirectory(SnapshotDir);
 
-        foreach (var component in Config.Components)
+        // All components are snapshotted at the same time (still before anything is loaded).
+        string snapshot = SnapshotDir;
+
+        Timing.Measure("undo snapshot", () => Concurrent.ForEach(Config.Components, component =>
         {
             try
             {
-                component.Save(SnapshotDir);
+                Timing.Measure($"  snapshot {component.Name}", () => component.Save(snapshot));
             }
             catch
             {
             }
-        }
+        }));
 
         Write("set", style, previous, false);
     }

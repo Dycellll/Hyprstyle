@@ -48,6 +48,19 @@ static class Hyprland
         return result;
     }
 
+    public static List<string> GetMonitorNames()
+    {
+        var names = new List<string>();
+
+        foreach (var node in JsonNode.Parse(Processes.RunCapture("hyprctl", "monitors", "-j"))?.AsArray() ?? [])
+        {
+            if (node?["disabled"]?.GetValue<bool>() != true && node?["name"]?.GetValue<string>() is string name)
+                names.Add(name);
+        }
+
+        return names;
+    }
+
     public static void MoveWindow(string address, string workspace)
     {
         string rule = $"hl.dsp.window.move({{ workspace = \"{workspace}\", follow = false, window = \"address:{address}\" }})";
