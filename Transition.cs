@@ -69,9 +69,21 @@ sealed class Transition : IDisposable
 
         File.WriteAllBytes($"{dir}/shell.qml", Gui.ReadResource(Assembly.GetExecutingAssembly(), "transition.qml"));
 
+        // in theory this should prevent "pkill quickshell" from killing the transition
+        // i hope sure do hope there's no hidden edge case where this doesn't work
+        string? shell = (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(':', StringSplitOptions.RemoveEmptyEntries)
+            .Select(d => Path.Join(d, "quickshell"))
+            .FirstOrDefault(File.Exists);
+
+        if (shell == null)
+            return null;
+
+        File.CreateSymbolicLink($"{dir}/hyprstyle-overlay", shell);
+
         Timing.Measure("  overlay spawn", () => Processes.StartDetached(
             "sh",
-            ["-c", "exec >/dev/null 2>&1 </dev/null; quickshell -p \"$0/shell.qml\"; rm -rf \"$0\"", dir],
+            ["-c", "exec >/dev/null 2>&1 </dev/null; \"$0/hyprstyle-overlay\" -p \"$0/shell.qml\"; rm -rf \"$0\"", dir],
             "HYPRSTYLE_TRANSITION_DIR",
             dir));
 

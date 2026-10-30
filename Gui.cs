@@ -20,7 +20,21 @@ static class Gui
 
         try
         {
-            Processes.Run("quickshell", ["-p", file]);
+            // this prevents the GUI from being killed by `pkill quickshell` in users' load hooks
+            // as i also said in the transition code, i really do hope there's no edge case where this breaks
+            string? shell = (Environment.GetEnvironmentVariable("PATH") ?? "")
+                .Split(':', StringSplitOptions.RemoveEmptyEntries)
+                .Select(d => Path.Join(d, "quickshell"))
+                .FirstOrDefault(File.Exists);
+
+            if (shell == null)
+                throw new Win32Exception();
+
+            string link = Path.Join(directory, "hyprstyle-gui");
+            File.Delete(link);
+            File.CreateSymbolicLink(link, shell);
+
+            Processes.Run(link, ["-p", file]);
         }
         catch (Win32Exception)
         {

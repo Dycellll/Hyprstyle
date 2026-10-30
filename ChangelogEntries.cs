@@ -2,6 +2,11 @@ static partial class Changelogs
 {
     private static void Register()
     {
+        AddChangelog("v1.6.2",
+            """
+            - Modified the GUI to run under a different process name (hyprstyle-gui), so that "pkill quickshell" in load hooks doesn't kill it.
+            - Modified the transition to run under a different process name (hyprstyle-overlay), so that "pkill quickshell" in load hooks doesn't kill it.
+            """);
         AddChangelog("v1.6.1",
             """
             - Added "--timing". Put it in a command, like "hyprstyle set my-style --timing", to see how long every step of a load or save took. Useful for optimizing your load/save times. Do note, they run in parallel, so the total time is not the sum of each step's time.
